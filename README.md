@@ -1,5 +1,9 @@
 # Talaria
 
+<p align="center">
+  <img src="logo.png" alt="Talaria" width="200"/>
+</p>
+
 > Lightweight kanban for agentic team coordination.
 > Named after the winged sandals of Hermes — swift, free, crossing between worlds.
 
