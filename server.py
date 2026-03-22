@@ -113,14 +113,20 @@ def create_card():
     data = _load()
     body = request.json
 
+    priority = body.get("priority", "medium")
+    labels = body.get("labels", [])
+    # Auto-tag priority as a label for filtering
+    if priority not in labels:
+        labels = [f"priority:{priority}"] + labels
+
     card = {
         "id": str(uuid.uuid4())[:8],
         "title": body.get("title", "Untitled"),
         "description": body.get("description", ""),
         "column": body.get("column", "backlog"),
-        "priority": body.get("priority", "medium"),
+        "priority": priority,
         "assignee": body.get("assignee", ""),
-        "labels": body.get("labels", []),
+        "labels": labels,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "agent_session_id": None,
