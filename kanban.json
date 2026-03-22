@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "name": "Talaria",
+    "version": "1.0",
+    "created": "2026-03-21T00:00:00Z"
+  },
+  "columns": [
+    {
+      "id": "backlog",
+      "name": "Backlog",
+      "trigger": null
+    },
+    {
+      "id": "ready",
+      "name": "Ready",
+      "trigger": null
+    },
+    {
+      "id": "in_progress",
+      "name": "In Progress",
+      "trigger": "agent_spawn"
+    },
+    {
+      "id": "review",
+      "name": "Review",
+      "trigger": "notify"
+    },
+    {
+      "id": "blocked",
+      "name": "Blocked",
+      "trigger": "notify"
+    },
+    {
+      "id": "done",
+      "name": "Done",
+      "trigger": "notify"
+    }
+  ],
+  "cards": [],
+  "activity_log": [
+    {
+      "ts": "2026-03-21T00:00:00Z",
+      "action": "board_initialized",
+      "card_title": "Talaria initialized",
+      "from_column": null,
+      "to_column": null
+    }
+  ]
+}

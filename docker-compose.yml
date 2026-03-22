@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  talaria:
+    build: .
+    ports:
+      - "8400:8400"
+    environment:
+      - TALARIA_PORT=8400
+      - TALARIA_WORK_DIR=/app
+    volumes:
+      - ./talaria.json:/app/talaria.json
+      - ./agent_queue.json:/app/agent_queue.json
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  # Optional: ngrok tunnel
+  # Uncomment and add NGROK_AUTHTOKEN to expose publicly
+  # ngrok:
+  #   image: ngrok/ngrok:latest
+  #   command: http talaria:8400
+  #   ports:
+  #     - "4040:4040"
+  #   environment:
+  #     - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
