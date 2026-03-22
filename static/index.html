@@ -16,10 +16,11 @@
       --accent: #58a6ff;
       --accent-dim: #1f6feb;
       --col-backlog: #6e7681;
+      --col-spec: #58a6ff;
+      --col-groom: #d29922;
       --col-ready: #3fb950;
       --col-inprogress: #d29922;
       --col-review: #a371f7;
-      --col-blocked: #f85149;
       --col-done: #3fb950;
       --priority-low: #6e7681;
       --priority-medium: #d29922;
@@ -130,11 +131,12 @@
     }
 
     .col-header[data-col="backlog"]    { border-color: var(--col-backlog);    background: rgba(110,118,129,0.1); color: var(--col-backlog); }
-    .col-header[data-col="ready"]      { border-color: var(--col-ready);      background: rgba(63,185,80,0.1);   color: var(--col-ready); }
-    .col-header[data-col="in_progress"]{ border-color: var(--col-inprogress); background: rgba(210,153,34,0.1);  color: var(--col-inprogress); }
-    .col-header[data-col="review"]     { border-color: var(--col-review);     background: rgba(163,113,247,0.1);color: var(--col-review); }
-    .col-header[data-col="blocked"]    { border-color: var(--col-blocked);     background: rgba(248,81,73,0.1);   color: var(--col-blocked); }
-    .col-header[data-col="done"]       { border-color: var(--col-done);        background: rgba(63,185,80,0.1);   color: var(--col-done); }
+    .col-header[data-col="spec"]      { border-color: var(--col-spec);      background: rgba(88,166,255,0.1);  color: var(--col-spec); }
+    .col-header[data-col="groom"]     { border-color: var(--col-groom);     background: rgba(210,153,34,0.1);  color: var(--col-groom); }
+    .col-header[data-col="ready"]     { border-color: var(--col-ready);     background: rgba(63,185,80,0.1);   color: var(--col-ready); }
+    .col-header[data-col="in_progress"]{ border-color: var(--col-inprogress);background: rgba(210,153,34,0.1); color: var(--col-inprogress); }
+    .col-header[data-col="review"]    { border-color: var(--col-review);    background: rgba(163,113,247,0.1); color: var(--col-review); }
+    .col-header[data-col="done"]      { border-color: var(--col-done);      background: rgba(63,185,80,0.1);   color: var(--col-done); }
 
     .col-count {
       background: rgba(255,255,255,0.1);

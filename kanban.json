@@ -11,6 +11,26 @@
       "trigger": null
     },
     {
+      "id": "spec",
+      "name": "Spec",
+      "trigger": "agent_spawn",
+      "worker": "hermes",
+      "context_files": [
+        "talaria.md",
+        "spec-guide.md"
+      ]
+    },
+    {
+      "id": "groom",
+      "name": "Groom",
+      "trigger": "agent_spawn",
+      "worker": "hermes",
+      "context_files": [
+        "talaria.md",
+        "groom-guide.md"
+      ]
+    },
+    {
       "id": "ready",
       "name": "Ready",
       "trigger": null
@@ -18,16 +38,16 @@
     {
       "id": "in_progress",
       "name": "In Progress",
-      "trigger": "agent_spawn"
+      "trigger": "agent_spawn",
+      "worker": "hermes",
+      "context_files": [
+        "talaria.md",
+        "coding-guide.md"
+      ]
     },
     {
       "id": "review",
       "name": "Review",
-      "trigger": "notify"
-    },
-    {
-      "id": "blocked",
-      "name": "Blocked",
       "trigger": "notify"
     },
     {
@@ -36,8 +56,360 @@
       "trigger": "notify"
     }
   ],
-  "cards": [],
+  "cards": [
+    {
+      "id": "f8a339ec",
+      "title": "Drag-and-drop card reordering within columns",
+      "description": "Cards can currently only move between columns, not reorder within a column. Add internal column ordering.",
+      "column": "backlog",
+      "priority": "medium",
+      "assignee": "",
+      "labels": [
+        "priority:medium",
+        "frontend"
+      ],
+      "created_at": "2026-03-22T04:08:04.662471+00:00",
+      "updated_at": "2026-03-22T04:08:04.662475+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    },
+    {
+      "id": "a1d2682d",
+      "title": "Webhook trigger for columns",
+      "description": "Extend the trigger system to support custom webhooks — fire a POST request to any URL when a card enters a trigger column. Useful for Slack, GitHub webhooks, Zapier, etc.",
+      "column": "backlog",
+      "priority": "low",
+      "assignee": "",
+      "labels": [
+        "priority:low",
+        "backend",
+        "integrations"
+      ],
+      "created_at": "2026-03-22T04:08:04.670601+00:00",
+      "updated_at": "2026-03-22T04:08:04.670604+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    },
+    {
+      "id": "d6b8818c",
+      "title": "GitHub issue sync",
+      "description": "Add a trigger that creates a GitHub issue when a card enters a column. Configure via GITHUB_REPO and GITHUB_TOKEN env vars.",
+      "column": "backlog",
+      "priority": "low",
+      "assignee": "",
+      "labels": [
+        "priority:low",
+        "backend",
+        "integrations"
+      ],
+      "created_at": "2026-03-22T04:08:04.689391+00:00",
+      "updated_at": "2026-03-22T04:08:04.689393+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    },
+    {
+      "id": "1af5612f",
+      "title": "Talaria project context setup",
+      "description": "Set up ~/.talaria/talaria/ with project.md, talaria.md, talaria.config.json. Document the pipeline: Backlog → Spec → Groom → Ready → In Progress → Review → Done. Add project.md that explains Talaria uses itself to build itself. Point this board at the talaria repo.",
+      "column": "spec",
+      "priority": "high",
+      "assignee": "",
+      "labels": [
+        "priority:high",
+        "infra"
+      ],
+      "created_at": "2026-03-22T04:45:04.044521+00:00",
+      "updated_at": "2026-03-22T04:51:56.184164+00:00",
+      "agent_session_id": null,
+      "status_notes": [
+        {
+          "id": "a445f3aa",
+          "text": "Project context set up at ~/.talaria/talaria/: talaria.config.json, project.md, talaria.md, and agent guide templates (spec-guide.md, groom-guide.md, coding-guide.md, review-guide.md). Column schema updated to product org pipeline: Backlog → Spec → Groom → Ready → In Progress → Review → Done. Card moved to Spec for Bry review.",
+          "author": "hermes",
+          "ts": "2026-03-22T04:51:56.184151+00:00"
+        }
+      ]
+    },
+    {
+      "id": "f07e06c2",
+      "title": "Agent guide templates",
+      "description": "Create agent guide templates in ~/.talaria/talaria/agents/: spec-guide.md (how to draft a spec), groom-guide.md (self-review checklist), coding-guide.md (repo conventions, test patterns), review-guide.md (what to look for in review). Each guide should be under 500 words — token-efficient.",
+      "column": "backlog",
+      "priority": "high",
+      "assignee": "",
+      "labels": [
+        "priority:high",
+        "infra",
+        "docs"
+      ],
+      "created_at": "2026-03-22T04:45:04.058184+00:00",
+      "updated_at": "2026-03-22T04:45:04.058194+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    },
+    {
+      "id": "9f875537",
+      "title": "Pipeline runner — column config to context drafting",
+      "description": "Refactor agent_watcher.py into a proper pipeline runner. Read column config from talaria.json (worker, context_files, instructions). Draft {worker}.md from context_files + card spec. Dispatch to correct worker. Log cost and output. Card advances when worker completes.",
+      "column": "backlog",
+      "priority": "high",
+      "assignee": "",
+      "labels": [
+        "priority:high",
+        "core",
+        "backend"
+      ],
+      "created_at": "2026-03-22T04:45:04.070953+00:00",
+      "updated_at": "2026-03-22T04:45:04.070959+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    },
+    {
+      "id": "06a31581",
+      "title": "Worktree management",
+      "description": "On card entering In Progress: create git worktree at talaria/{card-id}-{slug}, branch off base_branch, track worktree_path + branch_name on card. On card entering Done: merge branch to main, delete worktree. Handle errors if branch already exists or merge conflicts.",
+      "column": "backlog",
+      "priority": "high",
+      "assignee": "",
+      "labels": [
+        "priority:high",
+        "core",
+        "backend"
+      ],
+      "created_at": "2026-03-22T04:45:04.080724+00:00",
+      "updated_at": "2026-03-22T04:45:04.080728+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    },
+    {
+      "id": "3e1b1db5",
+      "title": "Talaria CLI",
+      "description": "CLI for Hermes to interact with Talaria: talaria move {card-id} {column}, talaria list, talaria log {card-id}, talaria create {title}, talaria context {card-id}. JSON input/output — no HTML overhead. Should work from any directory.",
+      "column": "backlog",
+      "priority": "medium",
+      "assignee": "",
+      "labels": [
+        "priority:medium",
+        "cli",
+        "ux"
+      ],
+      "created_at": "2026-03-22T04:45:04.089097+00:00",
+      "updated_at": "2026-03-22T04:45:04.089101+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    },
+    {
+      "id": "1c62fc3a",
+      "title": "Cost tracking per card",
+      "description": "Log tokens used and estimated cost on each card. Store in cost_log array on card: [{agent: hermes, tokens: 0, cost_usd: 0, ts: ISO}]. Display total cost per card and per sprint in the UI.",
+      "column": "backlog",
+      "priority": "medium",
+      "assignee": "",
+      "labels": [
+        "priority:medium",
+        "observability",
+        "frontend"
+      ],
+      "created_at": "2026-03-22T04:45:04.097151+00:00",
+      "updated_at": "2026-03-22T04:45:04.097155+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    },
+    {
+      "id": "65a28b8c",
+      "title": "Multi-repo project support",
+      "description": "Add repos/ config to talaria.config.json. Each repo has: name, path, talaria_instance_path. project.md at project root explains how repos relate. Cards can specify repo. Worktrees spawn in correct repo. UI shows all repos in one view.",
+      "column": "backlog",
+      "priority": "low",
+      "assignee": "",
+      "labels": [
+        "priority:low",
+        "infra",
+        "frontend"
+      ],
+      "created_at": "2026-03-22T04:45:04.103649+00:00",
+      "updated_at": "2026-03-22T04:45:04.103653+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    }
+  ],
   "activity_log": [
+    {
+      "ts": "2026-03-22T04:48:16.524582+00:00",
+      "action": "deleted",
+      "card_id": "15792776",
+      "card_title": "Test priority label",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:48:09.562195+00:00",
+      "action": "created",
+      "card_id": "15792776",
+      "card_title": "Test priority label",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.103996+00:00",
+      "action": "created",
+      "card_id": "65a28b8c",
+      "card_title": "Multi-repo project support",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.097474+00:00",
+      "action": "created",
+      "card_id": "1c62fc3a",
+      "card_title": "Cost tracking per card",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.089450+00:00",
+      "action": "created",
+      "card_id": "3e1b1db5",
+      "card_title": "Talaria CLI",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.081108+00:00",
+      "action": "created",
+      "card_id": "06a31581",
+      "card_title": "Worktree management",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.071376+00:00",
+      "action": "created",
+      "card_id": "9f875537",
+      "card_title": "Pipeline runner — column config to context drafting",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.058707+00:00",
+      "action": "created",
+      "card_id": "f07e06c2",
+      "card_title": "Agent guide templates",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.045093+00:00",
+      "action": "created",
+      "card_id": "1af5612f",
+      "card_title": "Talaria project context setup",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:43:36.535784+00:00",
+      "action": "deleted",
+      "card_id": "08f5709e",
+      "card_title": "Multiple board support",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:42:43.567980+00:00",
+      "action": "deleted",
+      "card_id": "563805ff",
+      "card_title": "Card search and filter",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:09:29.728989+00:00",
+      "action": "deleted",
+      "card_id": "ff750fe5",
+      "card_title": "Add/remove columns from the UI",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:09:08.434305+00:00",
+      "action": "deleted",
+      "card_id": "ae4fab78",
+      "card_title": "Mobile-responsive layout",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:55.940710+00:00",
+      "action": "deleted",
+      "card_id": "76dd4884",
+      "card_title": "Dark/light mode toggle",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.689578+00:00",
+      "action": "created",
+      "card_id": "d6b8818c",
+      "card_title": "GitHub issue sync",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.683592+00:00",
+      "action": "created",
+      "card_id": "ae4fab78",
+      "card_title": "Mobile-responsive layout",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.677399+00:00",
+      "action": "created",
+      "card_id": "08f5709e",
+      "card_title": "Multiple board support",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.670826+00:00",
+      "action": "created",
+      "card_id": "a1d2682d",
+      "card_title": "Webhook trigger for columns",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.662715+00:00",
+      "action": "created",
+      "card_id": "f8a339ec",
+      "card_title": "Drag-and-drop card reordering within columns",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.653523+00:00",
+      "action": "created",
+      "card_id": "563805ff",
+      "card_title": "Card search and filter",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.642586+00:00",
+      "action": "created",
+      "card_id": "76dd4884",
+      "card_title": "Dark/light mode toggle",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.629700+00:00",
+      "action": "created",
+      "card_id": "ff750fe5",
+      "card_title": "Add/remove columns from the UI",
+      "from_column": null,
+      "to_column": null
+    },
     {
       "ts": "2026-03-21T00:00:00Z",
       "action": "board_initialized",
