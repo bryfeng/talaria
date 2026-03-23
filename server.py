@@ -84,6 +84,12 @@ def _card_from_md(text: str) -> dict:
             })
     card["status_notes"] = status_notes
 
+    # Parse cost_log from frontmatter
+    if "cost_log" in fm:
+        card["cost_log"] = fm["cost_log"]
+    else:
+        card["cost_log"] = []
+
     return card
 
 
@@ -205,24 +211,54 @@ def _slugify(text: str) -> str:
 
 
 def _create_worktree(card: dict) -> None:
-    """Create a git worktree when a card enters In Progress."""
+    """Create a git worktree when a card enters In Progress.
+    
+    Idempotent: if the worktree already exists, links it to the card without error.
+    """
     card_id = card["id"]
     slug = _slugify(card.get("title", card_id))
     branch_name = f"{card_id}-{slug}"
     worktree_path = BASE_DIR / f"{card_id}-{slug}"
     base_branch = card.get("base_branch", "main")
 
+    # Check if this exact worktree already exists
     try:
+        wt_list = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=str(BASE_DIR), capture_output=True, text=True,
+        )
+        existing_paths = []
+        for line in wt_list.stdout.splitlines():
+            if line.startswith("worktree "):
+                existing_paths.append(line.split(" ", 1)[1].strip())
+    except Exception:
+        existing_paths = []
+
+    if str(worktree_path) in existing_paths:
+        # Already exists — just link it to the card
+        card["worktree_path"] = str(worktree_path)
+        card["branch_name"] = branch_name
+        print(f"[talaria] Worktree already exists, linked to card: {worktree_path}")
+        return
+
+    try:
+        # Check if branch already exists
         existing = subprocess.run(
             ["git", "branch", "--list", branch_name],
             cwd=str(BASE_DIR), capture_output=True, text=True,
         )
         if existing.stdout.strip():
-            subprocess.run(
+            # Branch exists — add worktree pointing to it
+            result = subprocess.run(
                 ["git", "worktree", "add", str(worktree_path), branch_name],
-                cwd=str(BASE_DIR), check=True, capture_output=True, text=True,
+                cwd=str(BASE_DIR), capture_output=True, text=True,
             )
+            if result.returncode != 0:
+                # Worktree path already used by another worktree
+                print(f"[talaria] Worktree path already in use for {card_id}: {result.stderr.strip()}")
+                return
         else:
+            # New branch + worktree
             subprocess.run(
                 ["git", "worktree", "add", "-b", branch_name, str(worktree_path), base_branch],
                 cwd=str(BASE_DIR), check=True, capture_output=True, text=True,
@@ -264,6 +300,10 @@ def _cleanup_worktree(card: dict) -> None:
             cwd=str(BASE_DIR), capture_output=True, text=True,
         )
         print(f"[talaria] Worktree cleaned up: {branch_name}")
+
+        # Clear worktree fields from card so they're not stale
+        card["worktree_path"] = None
+        card["branch_name"] = None
     except Exception as e:
         print(f"[talaria] Worktree cleanup error for {card.get('id')}: {e}")
 
@@ -459,7 +499,7 @@ def update_card(card_id):
 
     # Apply updates
     for key in ("title", "description", "priority", "assignee", "labels", "agent_session_id",
-                "base_branch", "worktree_path", "branch_name"):
+                "base_branch", "worktree_path", "branch_name", "cost_log"):
         if key in body:
             card[key] = body[key]
 
@@ -503,6 +543,23 @@ def add_note(card_id):
     card["updated_at"] = datetime.now(timezone.utc).isoformat()
     _save_card(card)
     return jsonify(note), 201
+
+@app.route("/api/card/<card_id>/cost", methods=["POST"])
+def add_cost(card_id):
+    card = _load_card(card_id)
+    if not card:
+        return jsonify({"error": "Not found"}), 404
+    body = request.json
+    entry = {
+        "agent": body.get("agent", "unknown"),
+        "tokens": body.get("tokens", 0),
+        "cost_usd": body.get("cost_usd", 0.0),
+        "ts": body.get("ts", datetime.now(timezone.utc).isoformat()),
+    }
+    card.setdefault("cost_log", []).append(entry)
+    card["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _save_card(card)
+    return jsonify(entry), 201
 
 @app.route("/api/agent_queue")
 def get_agent_queue():

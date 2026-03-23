@@ -31,7 +31,7 @@ from typing import Optional
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-TALARIA_HOME = Path(os.getenv("TALARIA_HOME", os.path.expanduser("~/.talaria/talaria")))
+TALARIA_HOME = Path(os.getenv("TALARIA_HOME", os.path.expanduser("~/talaria")))
 TALARIA_PORT = int(os.getenv("TALARIA_PORT", "8400"))
 TALARIA_WORK_DIR = os.getenv("TALARIA_WORK_DIR", os.path.expanduser("~/talaria"))
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "2"))
@@ -77,6 +77,25 @@ def api_patch(card_id: str, data: dict) -> bool:
             return True
     except Exception as e:
         print(f"[runner] Failed to PATCH card {card_id}: {e}")
+        return False
+
+
+def api_cost(card_id: str, agent: str, tokens: int, cost_usd: float) -> bool:
+    try:
+        url = f"http://localhost:{TALARIA_PORT}/api/card/{card_id}/cost"
+        body = json.dumps({
+            "agent": agent,
+            "tokens": tokens,
+            "cost_usd": cost_usd,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }).encode()
+        req = urllib.request.Request(url, data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST")
+        with urllib.request.urlopen(req, timeout=10):
+            return True
+    except Exception as e:
+        print(f"[runner] Failed to log cost for {card_id}: {e}")
         return False
 
 
@@ -324,6 +343,9 @@ def handle_worker_done(worker: Worker, success: bool = True):
     note = f"[runner] Worker {worker.worker_type} finished for card #{card_id}. "
     note += f"Elapsed: {elapsed:.0f}s."
     api_note(card_id, note, author="runner")
+
+    # Log cost entry (tokens/cost populated by agent itself if known; runner logs 0 as a timestamp marker)
+    api_cost(card_id, agent=worker.worker_type, tokens=0, cost_usd=0.0)
 
     # Advance to next column
     next_col = _get_next_column(worker.col_config["id"])

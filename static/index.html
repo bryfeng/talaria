@@ -564,6 +564,71 @@
     .card-action-btn:hover { color: var(--text); background: rgba(255,255,255,0.1); }
     .card-action-btn.delete:hover { color: var(--col-blocked); }
 
+    /* ── Cost ── */
+    .card-cost {
+      font-size: 10px;
+      color: #3fb950;
+      font-family: monospace;
+    }
+
+    .cost-badge {
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 3px 10px;
+      background: var(--card);
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    .cost-section h4 {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .cost-total {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .cost-entry {
+      background: var(--card);
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cost-entry-agent {
+      color: var(--accent);
+      font-weight: 500;
+      flex: 0 0 auto;
+    }
+
+    .cost-entry-tokens {
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .cost-entry-amount {
+      color: var(--text);
+      font-family: monospace;
+      white-space: nowrap;
+    }
+
+    .cost-entry-ts {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
     /* ── Responsive ── */
     @media (max-width: 600px) {
       .column { flex: 0 0 260px; }
@@ -580,6 +645,7 @@
     <span class="board-name" id="board-name">talaria</span>
   </div>
   <div class="header-right">
+    <span class="cost-badge" id="board-cost" title="Total cost across all cards">$0.00</span>
     <button class="btn btn-primary" onclick="openCreateModal()">+ New Card</button>
   </div>
 </header>
@@ -660,6 +726,11 @@
           <input type="text" id="detail-assignee" placeholder="assignee" onchange="updateCardField('assignee')" />
         </div>
       </div>
+      <div class="cost-section" id="detail-cost-section">
+        <h4>Cost</h4>
+        <div class="cost-total" id="detail-cost-total">$0.00 · 0 tokens</div>
+        <div id="detail-cost-log"></div>
+      </div>
       <div class="notes-section">
         <h4>Notes</h4>
         <div id="detail-notes"></div>
@@ -710,6 +781,23 @@ async function api(method, path, body) {
   });
 }
 
+// ── Cost helpers ──
+function boardCostTotals() {
+  let tokens = 0, cost = 0;
+  board.cards.forEach(c => (c.cost_log || []).forEach(e => {
+    tokens += (e.tokens || 0);
+    cost += (e.cost_usd || 0);
+  }));
+  return { tokens, cost };
+}
+
+function updateBoardCost() {
+  const { tokens, cost } = boardCostTotals();
+  const el = document.getElementById("board-cost");
+  if (el) el.textContent = `$${cost.toFixed(4)} · ${tokens.toLocaleString()} tok`;
+  el.title = `Total cost across all cards: $${cost.toFixed(6)}, ${tokens.toLocaleString()} tokens`;
+}
+
 // ── Render ──
 function renderBoard() {
   const boardEl = document.getElementById("board");
@@ -739,6 +827,7 @@ function renderBoard() {
 
   // Render cards after columns are in DOM
   board.cards.forEach(card => renderCard(card));
+  updateBoardCost();
 }
 
 function renderCard(card) {
@@ -771,6 +860,7 @@ function renderCard(card) {
       <div class="card-meta">
         <div class="priority-dot" data-p="${card.priority || 'medium'}"></div>
         ${card.assignee ? `<span class="assignee-chip">${escapeHtml(card.assignee)}</span>` : ""}
+        ${(card.cost_log && card.cost_log.length) ? `<span class="card-cost" title="Agent cost">$${card.cost_log.reduce((s,e)=>s+(e.cost_usd||0),0).toFixed(4)}</span>` : ""}
         <span class="card-id">#${card.id}</span>
       </div>
     </div>
@@ -900,6 +990,23 @@ async function openDetailModal(cardId) {
   colSel.innerHTML = board.columns.map(c =>
     `<option value="${c.id}" ${c.id === card.column ? "selected" : ""}>${c.name}</option>`
   ).join("");
+
+  // Cost
+  const costLog = card.cost_log || [];
+  let totalTokens = 0, totalCost = 0;
+  costLog.forEach(e => { totalTokens += (e.tokens || 0); totalCost += (e.cost_usd || 0); });
+  document.getElementById("detail-cost-total").textContent =
+    `$${totalCost.toFixed(4)} · ${totalTokens.toLocaleString()} tokens`;
+  const costLogEl = document.getElementById("detail-cost-log");
+  costLogEl.innerHTML = costLog.length
+    ? costLog.map(e => `
+        <div class="cost-entry">
+          <span class="cost-entry-agent">${escapeHtml(e.agent || "?")}</span>
+          <span class="cost-entry-tokens">${(e.tokens || 0).toLocaleString()} tok</span>
+          <span class="cost-entry-amount">$${(e.cost_usd || 0).toFixed(4)}</span>
+          <span class="cost-entry-ts">${new Date(e.ts).toLocaleString()}</span>
+        </div>`).join("")
+    : "<div style='color:var(--text-muted);font-size:12px'>No cost recorded yet</div>";
 
   // Notes
   const notesEl = document.getElementById("detail-notes");

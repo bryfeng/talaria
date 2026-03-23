@@ -8,6 +8,9 @@ logs/
 talaria.json.bak
 kanban.json.bak
 
+# Card data — generated at runtime, stays local
+cards/
+
 # Git worktrees (created for in_progress cards: {card_id}-{slug}/)
 *-*/
 
