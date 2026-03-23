@@ -9,6 +9,8 @@
 
 A self-hosted kanban board with first-class support for AI agent orchestration. Use it as a personal task tracker, a coordination layer for autonomous agents, or a lightweight Linear alternative.
 
+---
+
 ## Quick Start
 
 ```bash
@@ -31,6 +33,8 @@ Or with Docker:
 docker-compose up
 ```
 
+---
+
 ## Architecture
 
 ```
@@ -38,12 +42,20 @@ Browser (drag & drop)
        ↓ HTTP
 server.py (Flask)
        ↓ reads/writes
-board.json (source of truth)
-       ↓ triggers
-agent_queue.json ← agent_watcher.py reads & dispatches agents
+board.json          ← source of truth (gitignored)
+       ↓
+agent_watcher.py    ← polls /api/board, dispatches agents for trigger columns
 ```
 
 The board is a single JSON file. No database. No migration scripts. Works offline.
+
+---
+
+## Card Data
+
+Cards live in `board.json` (the source of truth). Optional `.md` card files can live in `cards/` — the server can render them as detail views. File naming: `<shortid>.md`, e.g. `cards/06a31581.md`.
+
+---
 
 ## Column Triggers
 
@@ -58,21 +70,21 @@ The board is a single JSON file. No database. No migration scripts. Works offlin
 
 Add or rename columns in `board.json`. Assign triggers per-column to automate workflows.
 
+---
+
 ## API
 
 ```
-GET    /api/board              — Full board state
+GET    /api/board              — Full board state (columns + cards + activity)
 POST   /api/card               — Create card
 GET    /api/card/:id           — Get card
 PATCH  /api/card/:id           — Update card (column, priority, labels, etc.)
 DELETE /api/card/:id           — Delete card
 POST   /api/card/:id/note      — Add a status note
-GET    /api/agent_queue        — See queued agent tasks
-POST   /api/agent_queue/pop    — Remove first item (after dispatch)
 GET    /api/activity           — Recent activity log
 ```
 
-Example — create a card that will dispatch an agent:
+**Example — create a card that will dispatch an agent:**
 
 ```bash
 curl -X POST http://localhost:8400/api/card \
@@ -85,6 +97,8 @@ curl -X POST http://localhost:8400/api/card \
   }'
 ```
 
+---
+
 ## Agent Configuration
 
 The watcher spawns AI subagents (defaults to Hermes Agent) for cards in trigger columns. Configure via environment variables:
@@ -92,12 +106,15 @@ The watcher spawns AI subagents (defaults to Hermes Agent) for cards in trigger 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TALARIA_PORT` | `8400` | HTTP server port |
+| `TALARIA_HOME` | `talaria/` | Path to Talaria directory (for relative paths) |
 | `TALARIA_WORK_DIR` | `~` | Working directory for agents |
 | `TALARIA_MAX_CONCURRENT` | `2` | Max agents running simultaneously |
 | `HERMES_AGENT_PATH` | `~/.hermes/hermes-agent/run_agent.py` | Path to agent binary |
-| `HERMES_VENV_PATH` | `~/.hermes/hermes-agent/venv/bin/python` | Python interpreter |
+| `HERMES_VENV_PATH` | `~/.hermes/hermes-agent/.venv/bin/python` | Python interpreter |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token for notifications |
 | `TELEGRAM_HOME_CHANNEL_ID` | — | Telegram chat ID for notifications |
+
+---
 
 ## Keyboard Shortcuts
 
@@ -105,6 +122,8 @@ The watcher spawns AI subagents (defaults to Hermes Agent) for cards in trigger 
 |-----|--------|
 | `N` | New card (when no input focused) |
 | `Esc` | Close modals |
+
+---
 
 ## Extending Triggers
 
@@ -120,6 +139,8 @@ elif trigger == "webhook":
 ```
 
 Add your own handler functions to automate any workflow — Slack messages, GitHub issues, cron jobs, etc.
+
+---
 
 ## Deploying with Ngrok
 
@@ -139,6 +160,8 @@ Or run both together:
 ngrok http 8400 --log=stdout > /dev/null &
 python server.py
 ```
+
+---
 
 ## License
 
