@@ -279,12 +279,23 @@ class _ProcessWrapper:
         self.pid = pid
 
     def poll(self):
-        """Return exit code if process has exited, None if still running."""
+        """Return exit code if process has exited, None if still running.
+        
+        Uses waitpid with WNOHANG to avoid leaving zombies — unlike os.kill(pid, 0)
+        which only checks if the PID is in the process table (zombies still count as alive).
+        """
         try:
-            os.kill(self.pid, 0)
-            return None  # still running
-        except ProcessLookupError:
-            return 0  # exited
+            pid, status = os.waitpid(self.pid, os.WNOHANG)
+            if pid == 0:
+                return None  # still running
+            # Normal exit: status & 0x7F == 0, signald exit: otherwise
+            if os.WIFEXITED(status):
+                return os.WEXITSTATUS(status)
+            elif os.WIFSIGNALED(status):
+                return -os.WTERMSIG(status)
+            return status
+        except ChildProcessError:
+            return 0  # already reaped / doesn't exist
 
     def kill(self):
         try:
@@ -354,12 +365,16 @@ class PipelineRunner:
             pid_str = card["agent_session_id"]
             try:
                 pid = int(pid_str)
-                os.kill(pid, 0)
-                self.active_workers[card_id] = Worker(card_id, col_config, card, "")  # placeholder
-                self.active_workers[card_id].pid = pid
-                return  # already running
-            except (ProcessLookupError, ValueError):
-                pass  # PID dead, continue
+                try:
+                    result = os.waitpid(pid, os.WNOHANG)
+                    if result[0] == 0:
+                        self.active_workers[card_id] = Worker(card_id, col_config, card, "")
+                        self.active_workers[card_id].pid = pid
+                        return  # still running
+                except ChildProcessError:
+                    pass  # PID dead / doesn't exist — continue to dispatch
+            except ValueError:
+                pass  # invalid PID string — continue to dispatch
 
         print(f"[runner] Dispatching {col_config.get('worker', 'hermes')} for card {card_id}: {card['title']}")
 

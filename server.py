@@ -154,6 +154,8 @@ def _trigger_action(column: dict, card: dict, data: dict):
             _fire_webhook(webhook_url, card, column)
         else:
             print(f"[talaria] webhook trigger on column '{col_id}' but no webhook_url configured")
+    elif trigger == "github_issue":
+        _create_github_issue(card, column, repo=column.get("github_repo"))
 
     # Fire webhook as side-effect on any column that has webhook_url set
     # (even alongside other trigger types)
@@ -161,6 +163,13 @@ def _trigger_action(column: dict, card: dict, data: dict):
         webhook_url = column.get("webhook_url")
         if webhook_url:
             _fire_webhook(webhook_url, card, column)
+
+    # Fire GitHub issue as side-effect on any column that has github_repo set
+    # (even alongside other trigger types)
+    if trigger != "github_issue":
+        github_repo = column.get("github_repo")
+        if github_repo:
+            _create_github_issue(card, column, repo=github_repo)
 
     _log("trigger_fired", card, to_col=col_id)
 
@@ -211,6 +220,51 @@ def _fire_webhook(url: str, card: dict, column: dict):
         print(f"[talaria] Webhook fired: {url}")
     except Exception as e:
         print(f"[talaria] Webhook failed ({url}): {e}")
+
+
+def _create_github_issue(card: dict, column: dict, repo: str = None):
+    """Create a GitHub issue when a card enters a column.
+
+    Reads GITHUB_TOKEN and GITHUB_REPO from the environment (or accepts an
+    explicit repo override from the column config).
+    """
+    import urllib.request
+    token = os.getenv("GITHUB_TOKEN")
+    repo = repo or os.getenv("GITHUB_REPO")
+    if not token or not repo:
+        print("[talaria] GitHub issue skipped: GITHUB_TOKEN or GITHUB_REPO not set")
+        return
+
+    title = card.get("title", "Untitled")
+    description = card.get("description", "")
+    col_name = column.get("name", column.get("id", ""))
+    body_lines = []
+    if description:
+        body_lines.append(description)
+        body_lines.append("")
+    body_lines.append(f"**Talaria card:** `{card['id']}` → *{col_name}*")
+
+    payload = {
+        "title": title,
+        "body": "\n".join(body_lines),
+    }
+    labels = [l for l in card.get("labels", []) if not l.startswith("priority:")]
+    if labels:
+        payload["labels"] = labels
+
+    url = f"https://api.github.com/repos/{repo}/issues"
+    data = json.dumps(payload, ensure_ascii=False).encode()
+    req = urllib.request.Request(url, data=data, headers={
+        "Content-Type": "application/json",
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github+json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read())
+            print(f"[talaria] GitHub issue created: {result.get('html_url')}")
+    except Exception as e:
+        print(f"[talaria] GitHub issue creation failed: {e}")
 
 
 # ── API ───────────────────────────────────────────────────────────────────────
@@ -361,7 +415,7 @@ def update_column(col_id):
     if not col:
         return jsonify({"error": "Not found"}), 404
     body = request.json
-    for key in ("trigger", "webhook_url", "worker", "context_files", "instructions"):
+    for key in ("trigger", "webhook_url", "github_repo", "worker", "context_files", "instructions"):
         if key in body:
             if body[key] is None and key in col:
                 del col[key]

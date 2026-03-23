@@ -344,7 +344,7 @@
     }
 
     /* ── Card detail modal ── */
-    .detail-modal .modal { width: 560px; }
+    .detail-modal .modal { width: 560px; max-height: 85vh; overflow-y: auto; }
 
     .detail-header {
       display: flex;
@@ -958,6 +958,12 @@ async function addNote() {
 }
 
 async function deleteCard(cardId) {
+  const card = board.cards.find(c => c.id === cardId);
+  if (!card) return;
+  if (card.column !== "backlog") {
+    showToast("Can only delete cards in Backlog");
+    return;
+  }
   if (!confirm("Delete this card?")) return;
   await api("DELETE", `/card/${cardId}`);
   const el = document.getElementById("card-" + cardId);
