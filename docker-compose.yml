@@ -9,7 +9,7 @@ services:
       - TALARIA_PORT=8400
       - TALARIA_WORK_DIR=/app
     volumes:
-      - ./talaria.json:/app/talaria.json
+      - ./board.json:/app/board.json
       - ./agent_queue.json:/app/agent_queue.json
       - ./logs:/app/logs
     restart: unless-stopped

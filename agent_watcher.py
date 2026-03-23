@@ -1,7 +1,7 @@
 """
 Talaria Pipeline Runner — Watches the board and dispatches workers at each pipeline stage.
 
-Reads column config (worker, context_files) from kanban.json columns.
+Reads column config (worker, context_files) from board.json columns via the /api/board endpoint.
 Drafts context from TALARIA_HOME/agents/ files + card spec.
 Spawns the right worker (hermes / claude-code / codex).
 Tracks PIDs, logs cost, advances cards.

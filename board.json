@@ -55,5 +55,894 @@
       "name": "Done",
       "trigger": "notify"
     }
+  ],
+  "cards": [
+    {
+      "id": "a1d2682d",
+      "title": "Webhook trigger for columns",
+      "description": "Extend the trigger system to support custom webhooks — fire a POST request to any URL when a card enters a trigger column. Useful for Slack, GitHub webhooks, Zapier, etc.",
+      "column": "review",
+      "priority": "low",
+      "assignee": "",
+      "labels": [
+        "priority:low",
+        "backend",
+        "integrations"
+      ],
+      "created_at": "2026-03-22T04:08:04.670601+00:00",
+      "updated_at": "2026-03-23T00:41:40.726952+00:00",
+      "agent_session_id": "61084",
+      "status_notes": [
+        {
+          "id": "9f70e957",
+          "text": "[runner] claude-code spawned (PID 61084) at 2026-03-23T00:39:31.440202+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T00:39:31.455860+00:00"
+        },
+        {
+          "id": "42ee84a2",
+          "text": "Implemented webhook trigger for columns: added _fire_webhook() that POSTs card data (event, column, card, ts) to a configured URL. trigger: \"webhook\" + webhook_url on a column fires on card entry. Any column with webhook_url fires as a side-effect alongside other triggers. Added PATCH /api/column/<col_id> endpoint to configure webhook_url/trigger via API.",
+          "author": "hermes",
+          "ts": "2026-03-23T00:41:35.134100+00:00"
+        }
+      ]
+    },
+    {
+      "id": "d6b8818c",
+      "title": "GitHub issue sync",
+      "description": "Add a trigger that creates a GitHub issue when a card enters a column. Configure via GITHUB_REPO and GITHUB_TOKEN env vars.",
+      "column": "ready",
+      "priority": "low",
+      "assignee": "",
+      "labels": [
+        "priority:low",
+        "backend",
+        "integrations"
+      ],
+      "created_at": "2026-03-22T04:08:04.689391+00:00",
+      "updated_at": "2026-03-23T01:05:02.262192+00:00",
+      "agent_session_id": "63865",
+      "status_notes": [
+        {
+          "id": "4513c4ce",
+          "text": "[runner] claude-code spawned (PID 62996) at 2026-03-23T01:01:37.727632+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T01:01:37.735872+00:00"
+        },
+        {
+          "id": "dd53bc74",
+          "text": "Added `github_issue` trigger type to server.py. New `_create_github_issue()` helper reads GITHUB_TOKEN and GITHUB_REPO env vars (with optional per-column github_repo override). Fires when trigger==\"github_issue\" or as a side-effect on any column with github_repo set. PATCH /api/column/:id now accepts github_repo.",
+          "author": "hermes",
+          "ts": "2026-03-23T01:03:26.192795+00:00"
+        },
+        {
+          "id": "79f22ca1",
+          "text": "[runner] Worker claude-code finished for card #d6b8818c. Elapsed: 119s.",
+          "author": "runner",
+          "ts": "2026-03-23T01:03:36.628792+00:00"
+        },
+        {
+          "id": "8021ff22",
+          "text": "Moved to groom by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T01:03:37.419315+00:00"
+        },
+        {
+          "id": "03f4cae6",
+          "text": "[runner] claude-code spawned (PID 63865) at 2026-03-23T01:03:37.957782+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T01:03:37.972318+00:00"
+        },
+        {
+          "id": "ef982d23",
+          "text": "Implemented GitHub issue sync: added _create_github_issue() function that fires when a card enters a column with trigger=github_issue or github_repo set. Reads GITHUB_TOKEN and GITHUB_REPO from env vars; supports per-column github_repo override via column PATCH API. Issue body includes card description and a link back to the Talaria card ID. Labels (minus priority labels) are forwarded to the GitHub issue.",
+          "author": "hermes",
+          "ts": "2026-03-23T01:04:47.030513+00:00"
+        },
+        {
+          "id": "a24b386e",
+          "text": "[runner] Worker claude-code finished for card #d6b8818c. Elapsed: 84s.",
+          "author": "runner",
+          "ts": "2026-03-23T01:05:02.248724+00:00"
+        },
+        {
+          "id": "9e0cb706",
+          "text": "Moved to ready by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T01:05:02.262184+00:00"
+        }
+      ]
+    },
+    {
+      "id": "1af5612f",
+      "title": "Talaria project context setup",
+      "description": "Set up ~/.talaria/talaria/ with project.md, talaria.md, talaria.config.json. Document the pipeline: Backlog → Spec → Groom → Ready → In Progress → Review → Done. Add project.md that explains Talaria uses itself to build itself. Point this board at the talaria repo.",
+      "column": "done",
+      "priority": "high",
+      "assignee": "",
+      "labels": [
+        "priority:high",
+        "infra"
+      ],
+      "created_at": "2026-03-22T04:45:04.044521+00:00",
+      "updated_at": "2026-03-23T00:27:23.322760+00:00",
+      "agent_session_id": "59823",
+      "status_notes": [
+        {
+          "id": "a445f3aa",
+          "text": "Project context set up at ~/.talaria/talaria/: talaria.config.json, project.md, talaria.md, and agent guide templates (spec-guide.md, groom-guide.md, coding-guide.md, review-guide.md). Column schema updated to product org pipeline: Backlog → Spec → Groom → Ready → In Progress → Review → Done. Card moved to Spec for Bry review.",
+          "author": "hermes",
+          "ts": "2026-03-22T04:51:56.184151+00:00"
+        },
+        {
+          "id": "0f03aca0",
+          "text": "Ready for Bry review. Project context at ~/.talaria/talaria/ is set up. Pipeline is live. Move to Groom when approved.",
+          "author": "hermes",
+          "ts": "2026-03-22T04:53:37.207736+00:00"
+        },
+        {
+          "id": "d6e336c5",
+          "text": "[runner] hermes spawned (PID 56832) at 2026-03-22T23:20:59.957583+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:20:59.961338+00:00"
+        },
+        {
+          "id": "5f5b0d57",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:28:58.427349+00:00"
+        },
+        {
+          "id": "cee373ce",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:15.154951+00:00"
+        },
+        {
+          "id": "72f3e134",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:31.937918+00:00"
+        },
+        {
+          "id": "18825b56",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:48.330128+00:00"
+        },
+        {
+          "id": "01c95cbe",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:05.137806+00:00"
+        },
+        {
+          "id": "087682f3",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:22.022707+00:00"
+        },
+        {
+          "id": "e32f9436",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:29.794652+00:00"
+        },
+        {
+          "id": "5ebe4ff4",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:38.933894+00:00"
+        },
+        {
+          "id": "55afe28d",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:45.989804+00:00"
+        },
+        {
+          "id": "14244356",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:55.499124+00:00"
+        },
+        {
+          "id": "b9b8097e",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:02.666185+00:00"
+        },
+        {
+          "id": "d6b29422",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:12.496706+00:00"
+        },
+        {
+          "id": "ada39344",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:19.293814+00:00"
+        },
+        {
+          "id": "bcfa825e",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:29.484147+00:00"
+        },
+        {
+          "id": "24e1ff45",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:35.729736+00:00"
+        },
+        {
+          "id": "58a20c71",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:46.127010+00:00"
+        },
+        {
+          "id": "3fd84b6d",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:52.397782+00:00"
+        },
+        {
+          "id": "5f3de01d",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:03.041184+00:00"
+        },
+        {
+          "id": "16c2bd50",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:08.901062+00:00"
+        },
+        {
+          "id": "1187389d",
+          "text": "[runner] hermes spawned (PID 57414) at 2026-03-22T23:32:39.981479+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:39.985710+00:00"
+        },
+        {
+          "id": "128a0a19",
+          "text": "[runner] hermes spawned (PID 57536) at 2026-03-22T23:34:19.196169+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:34:19.200214+00:00"
+        },
+        {
+          "id": "f193b8a5",
+          "text": "[runner] hermes spawned (PID 57674) at 2026-03-22T23:38:13.853146+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:38:13.857256+00:00"
+        },
+        {
+          "id": "32fc130c",
+          "text": "[runner] hermes spawned (PID 57793) at 2026-03-22T23:40:05.251203+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:40:05.255287+00:00"
+        },
+        {
+          "id": "33fdb4ac",
+          "text": "[runner] hermes spawned (PID 58214) at 2026-03-22T23:56:34.176964+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:56:34.180931+00:00"
+        },
+        {
+          "id": "3f7a7a54",
+          "text": "[runner] claude-code spawned (PID 58355) at 2026-03-23T00:00:20.474010+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T00:00:20.478096+00:00"
+        },
+        {
+          "id": "5d1039c5",
+          "text": "[runner] Worker claude-code finished for card #1af5612f. Elapsed: 0s.",
+          "author": "runner",
+          "ts": "2026-03-23T00:01:42.826293+00:00"
+        },
+        {
+          "id": "eab045d6",
+          "text": "Moved to groom by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T00:01:43.545365+00:00"
+        },
+        {
+          "id": "798b2f84",
+          "text": "[runner] Worker claude-code finished for card #1af5612f. Elapsed: 0s.",
+          "author": "runner",
+          "ts": "2026-03-23T00:02:02.267885+00:00"
+        },
+        {
+          "id": "c8e55aed",
+          "text": "Moved to ready by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T00:02:02.281236+00:00"
+        },
+        {
+          "id": "ad93c96e",
+          "text": "[runner] claude-code spawned (PID 59823) at 2026-03-23T00:18:09.212836+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T00:18:09.227816+00:00"
+        },
+        {
+          "id": "c5447041",
+          "text": "Verified project context setup is complete: project.md documents the pipeline and Talaria-builds-itself philosophy, talaria.md provides root agent context, talaria.config.json points the board at ~/talaria (git@github.com:bryfeng/talaria.git). Pipeline columns Backlog→Spec→Groom→Ready→In Progress→Review→Done are configured with stage-specific agent guides in agents/. No changes needed — all files were already in place.",
+          "author": "hermes",
+          "ts": "2026-03-23T00:18:45.441586+00:00"
+        },
+        {
+          "id": "4acded1f",
+          "text": "[runner] Worker claude-code finished for card #1af5612f. Elapsed: 368s.",
+          "author": "runner",
+          "ts": "2026-03-23T00:24:16.993630+00:00"
+        },
+        {
+          "id": "ee39ce4e",
+          "text": "Moved to review by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T00:24:17.721733+00:00"
+        }
+      ]
+    },
+    {
+      "id": "f07e06c2",
+      "title": "Agent guide templates",
+      "description": "Create agent guide templates in ~/.talaria/talaria/agents/: spec-guide.md (how to draft a spec), groom-guide.md (self-review checklist), coding-guide.md (repo conventions, test patterns), review-guide.md (what to look for in review). Each guide should be under 500 words — token-efficient.",
+      "column": "backlog",
+      "priority": "high",
+      "assignee": "",
+      "labels": [
+        "priority:high",
+        "infra",
+        "docs"
+      ],
+      "created_at": "2026-03-22T04:45:04.058184+00:00",
+      "updated_at": "2026-03-22T04:45:04.058194+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    },
+    {
+      "id": "9f875537",
+      "title": "Pipeline runner — column config to context drafting",
+      "description": "Refactor agent_watcher.py into a proper pipeline runner. Read column config from talaria.json (worker, context_files, instructions). Draft {worker}.md from context_files + card spec. Dispatch to correct worker. Log cost and output. Card advances when worker completes.",
+      "column": "done",
+      "priority": "high",
+      "assignee": "",
+      "labels": [
+        "priority:high",
+        "core",
+        "backend"
+      ],
+      "created_at": "2026-03-22T04:45:04.070953+00:00",
+      "updated_at": "2026-03-23T00:19:18.675600+00:00",
+      "agent_session_id": null,
+      "status_notes": [
+        {
+          "id": "b98a0d45",
+          "text": "SPEC DRAFT: Pipeline Runner — talaria #{9f875537}\n\n## Problem\nagent_watcher.py only watches a queue file and spawns hermes. It needs to be a proper pipeline runner that reads column config, drafts context, and dispatches the right worker.\n\n## Solution\nRefactor agent_watcher.py into a pipeline runner. Key changes:\n\n1. **Column trigger detection**\n   - Instead of just watching agent_queue.json, poll /api/board for cards in trigger columns\n   - Track which cards are \"in flight\" — dont re-dispatch already-working cards\n\n2. **Column config** (read from kanban.json columns[])\n   - worker: hermes | claude-code | codex\n   - context_files: [file paths relative to TALARIA_HOME/agents/]\n   - instructions: optional templated string\n\n3. **Context drafting**\n   - Read TALARIA_HOME/talaria.md (always first)\n   - Read each file in context_files[]\n   - Concatenate with card spec at the end\n   - Write to temp file for the worker\n\n4. **Worker dispatch**\n   - hermes: spawn subagent with --goal pointing to temp context file\n   - claude-code: invoke CLI with context file\n   - codex: invoke CLI with context file\n   - Track PID for lifecycle management\n\n5. **Lifecycle**\n   - On spawn: update card with agent_session_id=PID\n   - Poll PIDs every 30s\n   - On exit: log cost, add completion note, advance card\n\n6. **Cost tracking**\n   - Store {tokens, cost_usd, ts} on card.cost_log\n   - Parse from agent output or estimate from runtime\n\n## API changes\nNone — uses existing /api/card and /api/board endpoints.\n\n## Files changed\n- agent_watcher.py: full rewrite\n- server.py: add worktree_path, branch_name, cost_log fields to card schema\n\n## Acceptance criteria\n- [ ] Card entering Spec auto-spawns hermes with spec-guide context\n- [ ] Card entering Groom auto-spawns hermes with groom-guide context\n- [ ] Card entering In Progress auto-spawns correct worker\n- [ ] Worker PID tracked on card\n- [ ] On worker exit, card gets cost_log entry and note\n- [ ] Already-in-flight cards are not re-dispatched",
+          "author": "hermes",
+          "ts": "2026-03-22T23:12:20.759741+00:00"
+        },
+        {
+          "id": "1b93f8b5",
+          "text": "Spec drafted. Moving to Groom for self-review. @Bry — review and approve to move to Ready.",
+          "author": "hermes",
+          "ts": "2026-03-22T23:12:31.532133+00:00"
+        },
+        {
+          "id": "847e5028",
+          "text": "[runner] hermes spawned (PID 56834) at 2026-03-22T23:21:00.624134+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:21:00.628608+00:00"
+        },
+        {
+          "id": "74177d9d",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:28:58.430047+00:00"
+        },
+        {
+          "id": "a193112a",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:15.165064+00:00"
+        },
+        {
+          "id": "9bd0c976",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:31.946138+00:00"
+        },
+        {
+          "id": "4212af6d",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:48.339554+00:00"
+        },
+        {
+          "id": "be66e402",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:05.146633+00:00"
+        },
+        {
+          "id": "934ef704",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:22.032838+00:00"
+        },
+        {
+          "id": "af4ce2c8",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:29.797386+00:00"
+        },
+        {
+          "id": "fc35ab01",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:38.942990+00:00"
+        },
+        {
+          "id": "03b6eb50",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:45.998899+00:00"
+        },
+        {
+          "id": "eb5b363a",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:55.509785+00:00"
+        },
+        {
+          "id": "69b74abc",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:02.673608+00:00"
+        },
+        {
+          "id": "0f4551f6",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:12.506269+00:00"
+        },
+        {
+          "id": "7a063b93",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:19.302859+00:00"
+        },
+        {
+          "id": "1cbe6429",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:29.494097+00:00"
+        },
+        {
+          "id": "74f0bec0",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:35.738772+00:00"
+        },
+        {
+          "id": "8e971f23",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:46.136740+00:00"
+        },
+        {
+          "id": "9a3cb99b",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:52.401780+00:00"
+        },
+        {
+          "id": "8628b247",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:03.043962+00:00"
+        },
+        {
+          "id": "59a7e846",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:08.909707+00:00"
+        },
+        {
+          "id": "58343a1a",
+          "text": "[runner] hermes spawned (PID 57416) at 2026-03-22T23:32:40.746616+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:40.751150+00:00"
+        },
+        {
+          "id": "7c45e3ce",
+          "text": "[runner] hermes spawned (PID 57538) at 2026-03-22T23:34:19.863636+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:34:19.875184+00:00"
+        },
+        {
+          "id": "45a7e0cc",
+          "text": "[runner] hermes spawned (PID 57676) at 2026-03-22T23:38:14.385136+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:38:14.390322+00:00"
+        },
+        {
+          "id": "58e1b02a",
+          "text": "[runner] hermes spawned (PID 57795) at 2026-03-22T23:40:05.883807+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:40:05.893208+00:00"
+        },
+        {
+          "id": "4399b852",
+          "text": "[runner] hermes spawned (PID 58216) at 2026-03-22T23:56:34.718844+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:56:34.724021+00:00"
+        },
+        {
+          "id": "99ee3d7c",
+          "text": "[runner] claude-code spawned (PID 58564) at 2026-03-23T00:00:20.990963+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T00:00:20.995433+00:00"
+        },
+        {
+          "id": "c271e11e",
+          "text": "[runner] Worker claude-code finished for card #9f875537. Elapsed: 0s.",
+          "author": "runner",
+          "ts": "2026-03-23T00:01:44.085246+00:00"
+        },
+        {
+          "id": "54285c90",
+          "text": "Moved to review by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T00:01:44.774682+00:00"
+        }
+      ]
+    },
+    {
+      "id": "06a31581",
+      "title": "Worktree management",
+      "description": "On card entering In Progress: create git worktree at talaria/{card-id}-{slug}, branch off base_branch, track worktree_path + branch_name on card. On card entering Done: merge branch to main, delete worktree. Handle errors if branch already exists or merge conflicts.",
+      "column": "review",
+      "priority": "high",
+      "assignee": "",
+      "labels": [
+        "priority:high",
+        "core",
+        "backend"
+      ],
+      "created_at": "2026-03-22T04:45:04.080724+00:00",
+      "updated_at": "2026-03-23T01:02:28.745079+00:00",
+      "agent_session_id": "63046",
+      "status_notes": [
+        {
+          "id": "dfc4aa7f",
+          "text": "[runner] claude-code spawned (PID 60354) at 2026-03-23T00:23:59.497529+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T00:23:59.508267+00:00"
+        },
+        {
+          "id": "15927999",
+          "text": "Implemented worktree management in server.py: _create_worktree() fires when card enters in_progress (creates git worktree at talaria/{card-id}-{slug}, branches off base_branch, tracks worktree_path + branch_name on card); _cleanup_worktree() fires when card enters done (merges branch to main with --no-ff, removes worktree, deletes branch). Handles branch-already-exists and merge conflict errors gracefully. Also added base_branch/worktree_path/branch_name to PATCH-settable fields.",
+          "author": "hermes",
+          "ts": "2026-03-23T00:26:25.512970+00:00"
+        },
+        {
+          "id": "41d56ee4",
+          "text": "[runner] Worker claude-code finished for card #06a31581. Elapsed: 949s.",
+          "author": "runner",
+          "ts": "2026-03-23T00:39:48.739013+00:00"
+        },
+        {
+          "id": "7b29a172",
+          "text": "Moved to groom by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T00:39:49.424879+00:00"
+        },
+        {
+          "id": "4e364f92",
+          "text": "[runner] claude-code spawned (PID 61470) at 2026-03-23T00:39:49.959855+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T00:39:49.974648+00:00"
+        },
+        {
+          "id": "c40fdc5c",
+          "text": "Groomed: Medium, ~15k tokens estimated. Implementation fully meets spec: _create_worktree() fires on in_progress (worktree at {card-id}-{slug}, branches off base_branch, tracks worktree_path+branch_name on card, handles existing branch); _cleanup_worktree() fires on done (--no-ff merge to main, worktree remove --force, branch -d, leaves worktree on merge conflict for manual resolution). All PATCH fields exposed. No concerns — ready for review.",
+          "author": "hermes",
+          "ts": "2026-03-23T00:40:39.893830+00:00"
+        },
+        {
+          "id": "0ece0be9",
+          "text": "[runner] claude-code spawned (PID 63046) at 2026-03-23T01:01:38.246898+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T01:01:38.254025+00:00"
+        },
+        {
+          "id": "69927bad",
+          "text": "Worktree management implemented in server.py: _create_worktree() creates a git worktree at {card_id}-{slug} branching off base_branch when card enters in_progress (handles pre-existing branches); _cleanup_worktree() merges to main with --no-ff and removes the worktree+branch when card enters done (skips cleanup on merge conflict, leaving worktree for manual resolution). worktree_path and branch_name are tracked on the card. Hooked into _trigger_action() on column transitions.",
+          "author": "hermes",
+          "ts": "2026-03-23T01:02:19.806012+00:00"
+        },
+        {
+          "id": "16bd1d26",
+          "text": "[runner] Worker claude-code finished for card #06a31581. Elapsed: 50s.",
+          "author": "runner",
+          "ts": "2026-03-23T01:02:28.727453+00:00"
+        },
+        {
+          "id": "4fb637a9",
+          "text": "Moved to review by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T01:02:28.745057+00:00"
+        }
+      ]
+    },
+    {
+      "id": "3e1b1db5",
+      "title": "Talaria CLI",
+      "description": "CLI for Hermes to interact with Talaria: talaria move {card-id} {column}, talaria list, talaria log {card-id}, talaria create {title}, talaria context {card-id}. JSON input/output — no HTML overhead. Should work from any directory.",
+      "column": "review",
+      "priority": "medium",
+      "assignee": "",
+      "labels": [
+        "priority:medium",
+        "cli",
+        "ux"
+      ],
+      "created_at": "2026-03-22T04:45:04.089097+00:00",
+      "updated_at": "2026-03-23T00:41:11.051424+00:00",
+      "agent_session_id": "61519",
+      "status_notes": [
+        {
+          "id": "7299e78f",
+          "text": "[runner] claude-code spawned (PID 61519) at 2026-03-23T00:39:50.486762+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T00:39:50.493167+00:00"
+        },
+        {
+          "id": "ec32071d",
+          "text": "Created talaria_cli.py with commands: list, create, move, log, context. Installed to ~/.local/bin/talaria. JSON output only, works from any directory.",
+          "author": "hermes",
+          "ts": "2026-03-23T00:41:10.322439+00:00"
+        }
+      ]
+    },
+    {
+      "id": "1c62fc3a",
+      "title": "Cost tracking per card",
+      "description": "Log tokens used and estimated cost on each card. Store in cost_log array on card: [{agent: hermes, tokens: 0, cost_usd: 0, ts: ISO}]. Display total cost per card and per sprint in the UI.",
+      "column": "backlog",
+      "priority": "medium",
+      "assignee": "",
+      "labels": [
+        "priority:medium",
+        "observability",
+        "frontend"
+      ],
+      "created_at": "2026-03-22T04:45:04.097151+00:00",
+      "updated_at": "2026-03-22T04:45:04.097155+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    },
+    {
+      "id": "65a28b8c",
+      "title": "Multi-repo project support",
+      "description": "Add repos/ config to talaria.config.json. Each repo has: name, path, talaria_instance_path. project.md at project root explains how repos relate. Cards can specify repo. Worktrees spawn in correct repo. UI shows all repos in one view.",
+      "column": "backlog",
+      "priority": "low",
+      "assignee": "",
+      "labels": [
+        "priority:low",
+        "infra",
+        "frontend"
+      ],
+      "created_at": "2026-03-22T04:45:04.103649+00:00",
+      "updated_at": "2026-03-22T04:45:04.103653+00:00",
+      "agent_session_id": null,
+      "status_notes": []
+    }
+  ],
+  "activity_log": [
+    {
+      "ts": "2026-03-23T00:39:19.349542+00:00",
+      "action": "deleted",
+      "card_id": "f8a339ec",
+      "card_title": "Drag-and-drop card reordering within columns",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-23T00:34:51.869432+00:00",
+      "action": "moved",
+      "card_id": "06a31581",
+      "card_title": "Worktree management",
+      "from_column": "ready",
+      "to_column": "in_progress"
+    },
+    {
+      "ts": "2026-03-22T04:48:16.524582+00:00",
+      "action": "deleted",
+      "card_id": "15792776",
+      "card_title": "Test priority label",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:48:09.562195+00:00",
+      "action": "created",
+      "card_id": "15792776",
+      "card_title": "Test priority label",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.103996+00:00",
+      "action": "created",
+      "card_id": "65a28b8c",
+      "card_title": "Multi-repo project support",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.097474+00:00",
+      "action": "created",
+      "card_id": "1c62fc3a",
+      "card_title": "Cost tracking per card",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.089450+00:00",
+      "action": "created",
+      "card_id": "3e1b1db5",
+      "card_title": "Talaria CLI",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.081108+00:00",
+      "action": "created",
+      "card_id": "06a31581",
+      "card_title": "Worktree management",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.071376+00:00",
+      "action": "created",
+      "card_id": "9f875537",
+      "card_title": "Pipeline runner — column config to context drafting",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.058707+00:00",
+      "action": "created",
+      "card_id": "f07e06c2",
+      "card_title": "Agent guide templates",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:45:04.045093+00:00",
+      "action": "created",
+      "card_id": "1af5612f",
+      "card_title": "Talaria project context setup",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:43:36.535784+00:00",
+      "action": "deleted",
+      "card_id": "08f5709e",
+      "card_title": "Multiple board support",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:42:43.567980+00:00",
+      "action": "deleted",
+      "card_id": "563805ff",
+      "card_title": "Card search and filter",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:09:29.728989+00:00",
+      "action": "deleted",
+      "card_id": "ff750fe5",
+      "card_title": "Add/remove columns from the UI",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:09:08.434305+00:00",
+      "action": "deleted",
+      "card_id": "ae4fab78",
+      "card_title": "Mobile-responsive layout",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:55.940710+00:00",
+      "action": "deleted",
+      "card_id": "76dd4884",
+      "card_title": "Dark/light mode toggle",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.689578+00:00",
+      "action": "created",
+      "card_id": "d6b8818c",
+      "card_title": "GitHub issue sync",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.683592+00:00",
+      "action": "created",
+      "card_id": "ae4fab78",
+      "card_title": "Mobile-responsive layout",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.677399+00:00",
+      "action": "created",
+      "card_id": "08f5709e",
+      "card_title": "Multiple board support",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.670826+00:00",
+      "action": "created",
+      "card_id": "a1d2682d",
+      "card_title": "Webhook trigger for columns",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.662715+00:00",
+      "action": "created",
+      "card_id": "f8a339ec",
+      "card_title": "Drag-and-drop card reordering within columns",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.653523+00:00",
+      "action": "created",
+      "card_id": "563805ff",
+      "card_title": "Card search and filter",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.642586+00:00",
+      "action": "created",
+      "card_id": "76dd4884",
+      "card_title": "Dark/light mode toggle",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-22T04:08:04.629700+00:00",
+      "action": "created",
+      "card_id": "ff750fe5",
+      "card_title": "Add/remove columns from the UI",
+      "from_column": null,
+      "to_column": null
+    },
+    {
+      "ts": "2026-03-21T00:00:00Z",
+      "action": "board_initialized",
+      "card_title": "Talaria initialized",
+      "from_column": null,
+      "to_column": null
+    }
   ]
 }

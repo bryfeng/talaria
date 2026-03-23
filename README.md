@@ -38,7 +38,7 @@ Browser (drag & drop)
        ↓ HTTP
 server.py (Flask)
        ↓ reads/writes
-talaria.json (source of truth)
+board.json (source of truth)
        ↓ triggers
 agent_queue.json ← agent_watcher.py reads & dispatches agents
 ```
@@ -56,7 +56,7 @@ The board is a single JSON file. No database. No migration scripts. Works offlin
 | Blocked | `notify` | Telegram notification |
 | Done | `notify` | Telegram notification |
 
-Add or rename columns in `talaria.json`. Assign triggers per-column to automate workflows.
+Add or rename columns in `board.json`. Assign triggers per-column to automate workflows.
 
 ## API
 

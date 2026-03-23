@@ -6,7 +6,9 @@
 agent_queue.json
 logs/
 talaria.json.bak
+kanban.json
 kanban.json.bak
+board.json
 
 # Card data — generated at runtime, stays local
 cards/
