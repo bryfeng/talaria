@@ -148,6 +148,19 @@ def _trigger_action(column: dict, card: dict, data: dict):
         _notify_telegram(f"🤖 Agent dispatched: *{card['title']}* moved to *{col_name}*")
     elif trigger == "notify":
         _notify_telegram(f"📋 Card moved to *{col_name}*: *{card['title']}*")
+    elif trigger == "webhook":
+        webhook_url = column.get("webhook_url")
+        if webhook_url:
+            _fire_webhook(webhook_url, card, column)
+        else:
+            print(f"[talaria] webhook trigger on column '{col_id}' but no webhook_url configured")
+
+    # Fire webhook as side-effect on any column that has webhook_url set
+    # (even alongside other trigger types)
+    if trigger != "webhook":
+        webhook_url = column.get("webhook_url")
+        if webhook_url:
+            _fire_webhook(webhook_url, card, column)
 
     _log("trigger_fired", card, to_col=col_id)
 
@@ -180,6 +193,24 @@ def _notify_telegram(msg: str):
         urllib.request.urlopen(req, timeout=10)
     except Exception as e:
         print(f"[talaria] Telegram notify failed: {e}")
+
+
+def _fire_webhook(url: str, card: dict, column: dict):
+    """POST card data to a webhook URL when a card enters a column."""
+    import urllib.request
+    payload = {
+        "event": "card.moved",
+        "column": {"id": column["id"], "name": column["name"]},
+        "card": card,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    data = json.dumps(payload, ensure_ascii=False).encode()
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        print(f"[talaria] Webhook fired: {url}")
+    except Exception as e:
+        print(f"[talaria] Webhook failed ({url}): {e}")
 
 
 # ── API ───────────────────────────────────────────────────────────────────────
@@ -321,6 +352,24 @@ def pop_agent_queue():
         with open(AGENT_QUEUE, "w") as f:
             json.dump(queue, f, indent=2)
         return jsonify({"ok": True})
+
+@app.route("/api/column/<col_id>", methods=["PATCH"])
+def update_column(col_id):
+    """Update column configuration (e.g. webhook_url, trigger)."""
+    data = _load()
+    col = next((c for c in data["columns"] if c["id"] == col_id), None)
+    if not col:
+        return jsonify({"error": "Not found"}), 404
+    body = request.json
+    for key in ("trigger", "webhook_url", "worker", "context_files", "instructions"):
+        if key in body:
+            if body[key] is None and key in col:
+                del col[key]
+            elif body[key] is not None:
+                col[key] = body[key]
+    _save(data)
+    return jsonify(col)
+
 
 @app.route("/api/activity")
 def get_activity():
