@@ -14,7 +14,7 @@
       "id": "spec",
       "name": "Spec",
       "trigger": "agent_spawn",
-      "worker": "hermes",
+      "worker": "claude-code",
       "context_files": [
         "talaria.md",
         "spec-guide.md"
@@ -24,7 +24,7 @@
       "id": "groom",
       "name": "Groom",
       "trigger": "agent_spawn",
-      "worker": "hermes",
+      "worker": "claude-code",
       "context_files": [
         "talaria.md",
         "groom-guide.md"
@@ -39,7 +39,7 @@
       "id": "in_progress",
       "name": "In Progress",
       "trigger": "agent_spawn",
-      "worker": "hermes",
+      "worker": "claude-code",
       "context_files": [
         "talaria.md",
         "coding-guide.md"
@@ -111,7 +111,7 @@
       "id": "1af5612f",
       "title": "Talaria project context setup",
       "description": "Set up ~/.talaria/talaria/ with project.md, talaria.md, talaria.config.json. Document the pipeline: Backlog → Spec → Groom → Ready → In Progress → Review → Done. Add project.md that explains Talaria uses itself to build itself. Point this board at the talaria repo.",
-      "column": "spec",
+      "column": "ready",
       "priority": "high",
       "assignee": "",
       "labels": [
@@ -119,7 +119,7 @@
         "infra"
       ],
       "created_at": "2026-03-22T04:45:04.044521+00:00",
-      "updated_at": "2026-03-22T04:51:56.184164+00:00",
+      "updated_at": "2026-03-23T00:03:04.826355+00:00",
       "agent_session_id": null,
       "status_notes": [
         {
@@ -127,6 +127,192 @@
           "text": "Project context set up at ~/.talaria/talaria/: talaria.config.json, project.md, talaria.md, and agent guide templates (spec-guide.md, groom-guide.md, coding-guide.md, review-guide.md). Column schema updated to product org pipeline: Backlog → Spec → Groom → Ready → In Progress → Review → Done. Card moved to Spec for Bry review.",
           "author": "hermes",
           "ts": "2026-03-22T04:51:56.184151+00:00"
+        },
+        {
+          "id": "0f03aca0",
+          "text": "Ready for Bry review. Project context at ~/.talaria/talaria/ is set up. Pipeline is live. Move to Groom when approved.",
+          "author": "hermes",
+          "ts": "2026-03-22T04:53:37.207736+00:00"
+        },
+        {
+          "id": "d6e336c5",
+          "text": "[runner] hermes spawned (PID 56832) at 2026-03-22T23:20:59.957583+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:20:59.961338+00:00"
+        },
+        {
+          "id": "5f5b0d57",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:28:58.427349+00:00"
+        },
+        {
+          "id": "cee373ce",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:15.154951+00:00"
+        },
+        {
+          "id": "72f3e134",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:31.937918+00:00"
+        },
+        {
+          "id": "18825b56",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:48.330128+00:00"
+        },
+        {
+          "id": "01c95cbe",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:05.137806+00:00"
+        },
+        {
+          "id": "087682f3",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:22.022707+00:00"
+        },
+        {
+          "id": "e32f9436",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:29.794652+00:00"
+        },
+        {
+          "id": "5ebe4ff4",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:38.933894+00:00"
+        },
+        {
+          "id": "55afe28d",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:45.989804+00:00"
+        },
+        {
+          "id": "14244356",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:55.499124+00:00"
+        },
+        {
+          "id": "b9b8097e",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:02.666185+00:00"
+        },
+        {
+          "id": "d6b29422",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:12.496706+00:00"
+        },
+        {
+          "id": "ada39344",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:19.293814+00:00"
+        },
+        {
+          "id": "bcfa825e",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:29.484147+00:00"
+        },
+        {
+          "id": "24e1ff45",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:35.729736+00:00"
+        },
+        {
+          "id": "58a20c71",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:46.127010+00:00"
+        },
+        {
+          "id": "3fd84b6d",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:52.397782+00:00"
+        },
+        {
+          "id": "5f3de01d",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:03.041184+00:00"
+        },
+        {
+          "id": "16c2bd50",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:08.901062+00:00"
+        },
+        {
+          "id": "1187389d",
+          "text": "[runner] hermes spawned (PID 57414) at 2026-03-22T23:32:39.981479+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:39.985710+00:00"
+        },
+        {
+          "id": "128a0a19",
+          "text": "[runner] hermes spawned (PID 57536) at 2026-03-22T23:34:19.196169+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:34:19.200214+00:00"
+        },
+        {
+          "id": "f193b8a5",
+          "text": "[runner] hermes spawned (PID 57674) at 2026-03-22T23:38:13.853146+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:38:13.857256+00:00"
+        },
+        {
+          "id": "32fc130c",
+          "text": "[runner] hermes spawned (PID 57793) at 2026-03-22T23:40:05.251203+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:40:05.255287+00:00"
+        },
+        {
+          "id": "33fdb4ac",
+          "text": "[runner] hermes spawned (PID 58214) at 2026-03-22T23:56:34.176964+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:56:34.180931+00:00"
+        },
+        {
+          "id": "3f7a7a54",
+          "text": "[runner] claude-code spawned (PID 58355) at 2026-03-23T00:00:20.474010+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T00:00:20.478096+00:00"
+        },
+        {
+          "id": "5d1039c5",
+          "text": "[runner] Worker claude-code finished for card #1af5612f. Elapsed: 0s.",
+          "author": "runner",
+          "ts": "2026-03-23T00:01:42.826293+00:00"
+        },
+        {
+          "id": "eab045d6",
+          "text": "Moved to groom by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T00:01:43.545365+00:00"
+        },
+        {
+          "id": "798b2f84",
+          "text": "[runner] Worker claude-code finished for card #1af5612f. Elapsed: 0s.",
+          "author": "runner",
+          "ts": "2026-03-23T00:02:02.267885+00:00"
+        },
+        {
+          "id": "c8e55aed",
+          "text": "Moved to ready by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T00:02:02.281236+00:00"
         }
       ]
     },
@@ -151,7 +337,7 @@
       "id": "9f875537",
       "title": "Pipeline runner — column config to context drafting",
       "description": "Refactor agent_watcher.py into a proper pipeline runner. Read column config from talaria.json (worker, context_files, instructions). Draft {worker}.md from context_files + card spec. Dispatch to correct worker. Log cost and output. Card advances when worker completes.",
-      "column": "backlog",
+      "column": "review",
       "priority": "high",
       "assignee": "",
       "labels": [
@@ -160,9 +346,190 @@
         "backend"
       ],
       "created_at": "2026-03-22T04:45:04.070953+00:00",
-      "updated_at": "2026-03-22T04:45:04.070959+00:00",
+      "updated_at": "2026-03-23T00:03:04.837813+00:00",
       "agent_session_id": null,
-      "status_notes": []
+      "status_notes": [
+        {
+          "id": "b98a0d45",
+          "text": "SPEC DRAFT: Pipeline Runner — talaria #{9f875537}\n\n## Problem\nagent_watcher.py only watches a queue file and spawns hermes. It needs to be a proper pipeline runner that reads column config, drafts context, and dispatches the right worker.\n\n## Solution\nRefactor agent_watcher.py into a pipeline runner. Key changes:\n\n1. **Column trigger detection**\n   - Instead of just watching agent_queue.json, poll /api/board for cards in trigger columns\n   - Track which cards are \"in flight\" — dont re-dispatch already-working cards\n\n2. **Column config** (read from kanban.json columns[])\n   - worker: hermes | claude-code | codex\n   - context_files: [file paths relative to TALARIA_HOME/agents/]\n   - instructions: optional templated string\n\n3. **Context drafting**\n   - Read TALARIA_HOME/talaria.md (always first)\n   - Read each file in context_files[]\n   - Concatenate with card spec at the end\n   - Write to temp file for the worker\n\n4. **Worker dispatch**\n   - hermes: spawn subagent with --goal pointing to temp context file\n   - claude-code: invoke CLI with context file\n   - codex: invoke CLI with context file\n   - Track PID for lifecycle management\n\n5. **Lifecycle**\n   - On spawn: update card with agent_session_id=PID\n   - Poll PIDs every 30s\n   - On exit: log cost, add completion note, advance card\n\n6. **Cost tracking**\n   - Store {tokens, cost_usd, ts} on card.cost_log\n   - Parse from agent output or estimate from runtime\n\n## API changes\nNone — uses existing /api/card and /api/board endpoints.\n\n## Files changed\n- agent_watcher.py: full rewrite\n- server.py: add worktree_path, branch_name, cost_log fields to card schema\n\n## Acceptance criteria\n- [ ] Card entering Spec auto-spawns hermes with spec-guide context\n- [ ] Card entering Groom auto-spawns hermes with groom-guide context\n- [ ] Card entering In Progress auto-spawns correct worker\n- [ ] Worker PID tracked on card\n- [ ] On worker exit, card gets cost_log entry and note\n- [ ] Already-in-flight cards are not re-dispatched",
+          "author": "hermes",
+          "ts": "2026-03-22T23:12:20.759741+00:00"
+        },
+        {
+          "id": "1b93f8b5",
+          "text": "Spec drafted. Moving to Groom for self-review. @Bry — review and approve to move to Ready.",
+          "author": "hermes",
+          "ts": "2026-03-22T23:12:31.532133+00:00"
+        },
+        {
+          "id": "847e5028",
+          "text": "[runner] hermes spawned (PID 56834) at 2026-03-22T23:21:00.624134+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:21:00.628608+00:00"
+        },
+        {
+          "id": "74177d9d",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:28:58.430047+00:00"
+        },
+        {
+          "id": "a193112a",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:15.165064+00:00"
+        },
+        {
+          "id": "9bd0c976",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:31.946138+00:00"
+        },
+        {
+          "id": "4212af6d",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:29:48.339554+00:00"
+        },
+        {
+          "id": "be66e402",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:05.146633+00:00"
+        },
+        {
+          "id": "934ef704",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:22.032838+00:00"
+        },
+        {
+          "id": "af4ce2c8",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:29.797386+00:00"
+        },
+        {
+          "id": "fc35ab01",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:38.942990+00:00"
+        },
+        {
+          "id": "03b6eb50",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:45.998899+00:00"
+        },
+        {
+          "id": "eb5b363a",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:30:55.509785+00:00"
+        },
+        {
+          "id": "69b74abc",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:02.673608+00:00"
+        },
+        {
+          "id": "0f4551f6",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:12.506269+00:00"
+        },
+        {
+          "id": "7a063b93",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:19.302859+00:00"
+        },
+        {
+          "id": "1cbe6429",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:29.494097+00:00"
+        },
+        {
+          "id": "74f0bec0",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:35.738772+00:00"
+        },
+        {
+          "id": "8e971f23",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:46.136740+00:00"
+        },
+        {
+          "id": "9a3cb99b",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:31:52.401780+00:00"
+        },
+        {
+          "id": "8628b247",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:03.043962+00:00"
+        },
+        {
+          "id": "59a7e846",
+          "text": "[runner] Failed to spawn worker: hermes. Check binary paths.",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:08.909707+00:00"
+        },
+        {
+          "id": "58343a1a",
+          "text": "[runner] hermes spawned (PID 57416) at 2026-03-22T23:32:40.746616+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:32:40.751150+00:00"
+        },
+        {
+          "id": "7c45e3ce",
+          "text": "[runner] hermes spawned (PID 57538) at 2026-03-22T23:34:19.863636+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:34:19.875184+00:00"
+        },
+        {
+          "id": "45a7e0cc",
+          "text": "[runner] hermes spawned (PID 57676) at 2026-03-22T23:38:14.385136+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:38:14.390322+00:00"
+        },
+        {
+          "id": "58e1b02a",
+          "text": "[runner] hermes spawned (PID 57795) at 2026-03-22T23:40:05.883807+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:40:05.893208+00:00"
+        },
+        {
+          "id": "4399b852",
+          "text": "[runner] hermes spawned (PID 58216) at 2026-03-22T23:56:34.718844+00:00",
+          "author": "runner",
+          "ts": "2026-03-22T23:56:34.724021+00:00"
+        },
+        {
+          "id": "99ee3d7c",
+          "text": "[runner] claude-code spawned (PID 58564) at 2026-03-23T00:00:20.990963+00:00",
+          "author": "runner",
+          "ts": "2026-03-23T00:00:20.995433+00:00"
+        },
+        {
+          "id": "c271e11e",
+          "text": "[runner] Worker claude-code finished for card #9f875537. Elapsed: 0s.",
+          "author": "runner",
+          "ts": "2026-03-23T00:01:44.085246+00:00"
+        },
+        {
+          "id": "54285c90",
+          "text": "Moved to review by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T00:01:44.774682+00:00"
+        }
+      ]
     },
     {
       "id": "06a31581",

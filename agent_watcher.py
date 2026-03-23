@@ -1,176 +1,451 @@
 """
-Talaria Agent Watcher — Watches agent_queue.json and spawns AI agents
-for cards that need work. Run alongside server.py or as a separate process.
+Talaria Pipeline Runner — Watches the board and dispatches workers at each pipeline stage.
+
+Reads column config (worker, context_files) from kanban.json columns.
+Drafts context from TALARIA_HOME/agents/ files + card spec.
+Spawns the right worker (hermes / claude-code / codex).
+Tracks PIDs, logs cost, advances cards.
+
+Usage:
+    python agent_watcher.py
+
+Environment:
+    TALARIA_HOME       — Path to Talaria instance home (default: ~/.talaria/talaria)
+    TALARIA_PORT      — Board API port (default: 8400)
+    TALARIA_WORK_DIR  — Repo working directory (default: ~/talaria)
+    MAX_CONCURRENT    — Max simultaneous agents (default: 2)
+    POLL_INTERVAL     — Seconds between board polls (default: 15)
 """
 
 import json
 import os
 import sys
 import time
+import signal
 import subprocess
+import tempfile
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
-BASE_DIR = Path(__file__).parent
-KANBAN_FILE = BASE_DIR / "kanban.json"
-QUEUE_FILE = BASE_DIR / "agent_queue.json"
+# ── Config ────────────────────────────────────────────────────────────────────
 
-# Agent configuration — override with env vars
-HERMES_AGENT = os.getenv("HERMES_AGENT_PATH",
+TALARIA_HOME = Path(os.getenv("TALARIA_HOME", os.path.expanduser("~/.talaria/talaria")))
+TALARIA_PORT = int(os.getenv("TALARIA_PORT", "8400"))
+TALARIA_WORK_DIR = os.getenv("TALARIA_WORK_DIR", os.path.expanduser("~/talaria"))
+MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "2"))
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "15"))
+
+# Agent binaries
+HERMES_BINARY = os.getenv("HERMES_AGENT_PATH",
     os.path.expanduser("~/.hermes/hermes-agent/run_agent.py"))
-HERMES_VENV = os.getenv("HERMES_VENV_PATH",
+HERMES_PYTHON = os.getenv("HERMES_VENV_PATH",
     os.path.expanduser("~/.hermes/hermes-agent/venv/bin/python"))
-WORK_DIR = os.getenv("TALARIA_WORK_DIR", os.path.expanduser("~"))
-KANBAN_PORT = int(os.getenv("TALARIA_PORT", os.getenv("KANBAN_PORT", 8400)))
-MAX_CONCURRENT = int(os.getenv("TALARIA_MAX_CONCURRENT", "2"))
+CLAUDE_CODE_BINARY = os.getenv("CLAUDE_CODE_BINARY", "claude")
+CODEX_BINARY = os.getenv("CODEX_BINARY", "codex")
 
-def api(path):
+
+# ── API helpers ───────────────────────────────────────────────────────────────
+
+def api_board() -> Optional[dict]:
+    """Fetch the full board from the Talaria server."""
     try:
-        with urllib.request.urlopen(f"http://localhost:{KANBAN_PORT}{path}", timeout=5) as r:
+        with urllib.request.urlopen(f"http://localhost:{TALARIA_PORT}/api/board", timeout=10) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        print(f"[runner] Failed to fetch board: {e}")
+        return None
+
+
+def api_get(card_id: str) -> Optional[dict]:
+    try:
+        with urllib.request.urlopen(f"http://localhost:{TALARIA_PORT}/api/card/{card_id}", timeout=10) as r:
             return json.loads(r.read())
     except Exception:
         return None
+
+
+def api_patch(card_id: str, data: dict) -> bool:
+    try:
+        url = f"http://localhost:{TALARIA_PORT}/api/card/{card_id}"
+        body = json.dumps(data).encode()
+        req = urllib.request.Request(url, data=body,
+            headers={"Content-Type": "application/json"},
+            method="PATCH")
+        with urllib.request.urlopen(req, timeout=10):
+            return True
+    except Exception as e:
+        print(f"[runner] Failed to PATCH card {card_id}: {e}")
+        return False
+
+
+def api_note(card_id: str, text: str, author: str = "runner") -> bool:
+    try:
+        url = f"http://localhost:{TALARIA_PORT}/api/card/{card_id}/note"
+        body = json.dumps({"text": text, "author": author}).encode()
+        req = urllib.request.urlopen(
+            urllib.request.Request(url, data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST"),
+            timeout=10)
+        return True
+    except Exception as e:
+        print(f"[runner] Failed to add note to {card_id}: {e}")
+        return False
+
 
 def notify(msg: str):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_HOME_CHANNEL_ID") or os.getenv("TELEGRAM_HOME_CHANNEL", "").lstrip("@")
     if not token or not chat_id:
-        print(f"[watcher] notify (no telegram creds): {msg}")
         return
     try:
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         data = json.dumps({"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"}).encode()
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
         urllib.request.urlopen(req, timeout=10)
-    except Exception as e:
-        print(f"[watcher] Telegram error: {e}")
+    except Exception:
+        pass
 
-def pop_queue():
-    """Remove the first item from the agent queue."""
-    if not QUEUE_FILE.exists():
-        return None
-    with open(QUEUE_FILE) as f:
-        queue = json.load(f)
-    if not queue:
-        return None
-    item = queue.pop(0)
-    with open(QUEUE_FILE, "w") as f:
-        json.dump(queue, f, indent=2)
-    return item
 
-def get_agent_instructions(card: dict) -> str:
-    """Build the prompt/instructions for the agent based on the card."""
-    title = card.get("title", "Untitled")
-    description = card.get("description", "")
-    card_id = card.get("id", "")
+# ── Context drafting ─────────────────────────────────────────────────────────
 
-    instructions = f"""You have been assigned a task from Talaria.
+def draft_context(col_config: dict, card: dict, home: Path) -> str:
+    """Build the context file fed to a worker.
 
-CARD: {title}
-ID: #{card_id}
+    Reads TALARIA_HOME/talaria.md (always first), then each file in
+    context_files, then appends the card spec at the end.
+    """
+    lines = []
+    lines.append(f"# Talaria — Worker Context")
+    lines.append(f"# Card: {card['title']} [#{card['id']}]")
+    lines.append(f"# Column: {col_config['id']} ({col_config['name']})")
+    lines.append(f"# Worker: {col_config.get('worker', 'hermes')}")
+    lines.append(f"# Generated: {datetime.now(timezone.utc).isoformat()}")
+    lines.append("")
 
-DESCRIPTION:
-{description if description else "(No description provided)"}
+    # Always load talaria.md first
+    root = home / "talaria.md"
+    if root.exists():
+        lines.append("## Project Context")
+        lines.append(root.read_text())
+        lines.append("")
 
-WORKING DIRECTORY: {WORK_DIR}
+    # Then load additional context files
+    for ctx_file in col_config.get("context_files", []):
+        if ctx_file == "talaria.md":
+            continue  # already loaded
+        path = home / ctx_file
+        if path.exists():
+            lines.append(f"## {ctx_file}")
+            lines.append(path.read_text())
+            lines.append("")
+        else:
+            lines.append(f"## {ctx_file} [NOT FOUND: {path}]")
+            lines.append("")
 
-GUIDELINES:
-- Read the card description carefully and complete the task.
-- Use git to commit your work with a clear message: "talaria #{card_id}: {title}"
-- When done, add a note to the card via the Talaria API:
-  curl -X POST http://localhost:{KANBAN_PORT}/api/card/{card_id}/note \\
-    -H "Content-Type: application/json" \\
-    -d '{{"text": "Task completed. Summary of work done.", "author": "agent"}}'
-- Then move the card to "done" via:
-  curl -X PATCH http://localhost:{KANBAN_PORT}/api/card/{card_id} \\
-    -H "Content-Type: application/json" \\
-    -d '{{"column": "done"}}'
-- Report back with a summary of what you accomplished.
+    # Finally, card spec
+    lines.append("## Card Spec")
+    lines.append(f"**Title:** {card.get('title', 'Untitled')}")
+    lines.append(f"**ID:** {card['id']}")
+    lines.append("")
+    desc = card.get("description", "")
+    if desc:
+        lines.append(desc)
+    else:
+        lines.append("(No description provided)")
 
-Start now.
-"""
-    return instructions
+    # Instructions from column config
+    if col_config.get("instructions"):
+        lines.append("")
+        lines.append(f"## Instructions")
+        lines.append(col_config["instructions"])
 
-def spawn_agent(instructions: str) -> int:
-    """Spawn a subagent with the given instructions. Returns PID."""
-    cmd = [
-        HERMES_VENV, HERMES_AGENT,
-        "--goal", instructions,
-        "--platform", "local",
-        "--quiet",
-    ]
-    env = os.environ.copy()
-    proc = subprocess.Popen(cmd, env=env, cwd=WORK_DIR)
-    return proc.pid
+    return "\n".join(lines)
 
-def mark_card_in_progress(card_id: str, agent_pid: int):
-    api_path = f"/api/card/{card_id}"
-    resp = api(api_path)
-    if resp:
+
+# ── Worker dispatch ───────────────────────────────────────────────────────────
+
+class Worker:
+    def __init__(self, card_id: str, col_config: dict, card: dict, context: str):
+        self.card_id = card_id
+        self.col_config = col_config
+        self.card = card
+        self.context = context
+        self.pid: Optional[int] = None
+        self.started_at: Optional[str] = None
+        self.process: Optional[subprocess.Popen] = None
+
+    @property
+    def worker_type(self) -> str:
+        return self.col_config.get("worker", "hermes")
+
+    def _write_context(self) -> Path:
+        """Write context to a temp file readable by the worker."""
+        fd, path = tempfile.mkstemp(suffix=".md", prefix=f"talaria-{self.card_id}-")
+        with os.fdopen(fd, "w") as f:
+            f.write(self.context)
+        return Path(path)
+
+    def _spawn_hermes(self, ctx_path: Path, goal: str) -> int:
+        cmd = [
+            HERMES_PYTHON, HERMES_BINARY,
+            "--query", goal,
+            "--model", os.getenv("LLM_MODEL", "MiniMax-M2.7"),
+            "--base-url", os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
+        ]
+        proc = subprocess.Popen(cmd, cwd=TALARIA_WORK_DIR, env=self._env())
+        return proc.pid
+
+    def _env(self) -> dict:
+        """Get env dict for subprocess. Inherits parent environment as-is."""
+        return os.environ.copy()
+
+    def _spawn_claude_code(self, ctx_path: Path, goal: str) -> int:
+        cmd = [CLAUDE_CODE_BINARY, "--dangerously-skip-permissions", "--print", goal]
+        proc = subprocess.Popen(cmd, cwd=TALARIA_WORK_DIR, env=self._env())
+        return proc.pid
+
+    def _spawn_codex(self, ctx_path: Path, goal: str) -> int:
+        cmd = [CODEX_BINARY, goal]
+        proc = subprocess.Popen(cmd, cwd=TALARIA_WORK_DIR, env=self._env())
+        return proc.pid
+
+    def spawn(self) -> bool:
+        """Spawn the worker process. Returns True if successful."""
+        ctx_path = self._write_context()
+        self.started_at = datetime.now(timezone.utc).isoformat()
+
+        # Build goal: include context path + instruction to read it
+        goal = (
+            f"IMPORTANT: Read the file at {ctx_path} carefully before starting.\n"
+            f"It contains your full task context, instructions, and the card spec.\n"
+            f"Complete the task described in that file, then:\n"
+            f"  1. Add a completion note to the Talaria card via the API:\n"
+            f"     curl -X POST http://localhost:{TALARIA_PORT}/api/card/{self.card_id}/note \\\n"
+            f"       -H 'Content-Type: application/json' \\\n"
+            f"       -d '{{\"text\": \"<what you did>\", \"author\": \"hermes\"}}'\n"
+            f"  2. Move the card to 'review' via:\n"
+            f"     curl -X PATCH http://localhost:{TALARIA_PORT}/api/card/{self.card_id} \\\n"
+            f"       -H 'Content-Type: application/json' \\\n"
+            f"       -d '{{\"column\": \"review\"}}'\n"
+        )
+
         try:
-            import urllib.request
-            url = f"http://localhost:{KANBAN_PORT}{api_path}"
-            data = json.dumps({
-                "agent_session_id": str(agent_pid),
-                "status_notes": [{
-                    "id": card_id + "-spawn",
-                    "text": f"Agent spawned (PID {agent_pid}) at {datetime.now(timezone.utc).isoformat()}",
-                    "author": "watcher",
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }]
-            }).encode()
-            req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-            req.get_method = lambda: "PATCH"
-            urllib.request.urlopen(req, timeout=5)
+            if self.worker_type == "claude-code":
+                self.pid = self._spawn_claude_code(ctx_path, goal)
+            elif self.worker_type == "codex":
+                self.pid = self._spawn_codex(ctx_path, goal)
+            else:
+                self.pid = self._spawn_hermes(ctx_path, goal)
+
+            self.process = _ProcessWrapper(self.pid)
+            print(f"[runner] Spawned {self.worker_type} for card {self.card_id}, PID {self.pid}")
+            return True
+        except FileNotFoundError:
+            print(f"[runner] Binary not found for worker type: {self.worker_type}")
+            return False
         except Exception as e:
-            print(f"[watcher] Failed to mark card in-progress: {e}")
+            print(f"[runner] Failed to spawn {self.worker_type}: {e}")
+            return False
 
-def run(watch_interval: int = 15, dispatch_interval: int = 60, max_concurrent: int = None):
-    if max_concurrent is None:
-        max_concurrent = MAX_CONCURRENT
+    def is_done(self) -> bool:
+        """Check if the worker process has exited."""
+        if self.process is None:
+            return True
+        return self.process.poll() is not None
 
-    print(f"[watcher] Talaria Agent Watcher started")
-    print(f"[watcher] Checking queue every {watch_interval}s, dispatching every {dispatch_interval}s")
-    print(f"[watcher] Max concurrent agents: {max_concurrent}")
-    print(f"[watcher] Work directory: {WORK_DIR}")
+    def cleanup(self):
+        """Called when the worker is done. Logs completion."""
+        if self.process is None:
+            return
+        returncode = self.process.poll()
+        elapsed = 0
+        if self.started_at:
+            try:
+                started = datetime.fromisoformat(self.started_at)
+                elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+            except Exception:
+                pass
 
-    active_agents = 0
-    last_dispatch = 0
+        print(f"[runner] Worker {self.worker_type} for {self.card_id} done. "
+              f"PID {self.pid}, exit={returncode}, elapsed={elapsed:.0f}s")
 
-    while True:
-        now = time.time()
 
-        # Check if we should dispatch
-        if now - last_dispatch >= dispatch_interval and active_agents < max_concurrent:
-            item = pop_queue()
-            if item:
-                card = item["card"]
-                queued_at = item.get("queued_at", "unknown")
-                print(f"[watcher] Dispatching agent for: {card['title']}")
+class _ProcessWrapper:
+    """Wrapper for a subprocess.Popen that works even if the process isn't our child."""
+    def __init__(self, pid: int):
+        self.pid = pid
 
-                instructions = get_agent_instructions(card)
-                pid = spawn_agent(instructions)
-                mark_card_in_progress(card["id"], pid)
+    def poll(self):
+        """Return exit code if process has exited, None if still running."""
+        try:
+            os.kill(self.pid, 0)
+            return None  # still running
+        except ProcessLookupError:
+            return 0  # exited
 
-                notify(f"🤖 Agent dispatched for: *{card['title']}*\nPID: {pid}")
-                active_agents += 1
-                last_dispatch = now
-                print(f"[watcher] Agent PID {pid} — {active_agents}/{max_concurrent} active")
+    def kill(self):
+        try:
+            os.kill(self.pid, 9)
+        except ProcessLookupError:
+            pass
 
-        time.sleep(watch_interval)
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+def handle_worker_done(worker: Worker, success: bool = True):
+    """Called when a worker finishes. Updates the card and advances the pipeline."""
+    worker.cleanup()
+
+    card_id = worker.card_id
+
+    # Log completion note
+    elapsed = 0
+    if worker.started_at:
+        try:
+            started = datetime.fromisoformat(worker.started_at)
+            elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        except Exception:
+            pass
+
+    note = f"[runner] Worker {worker.worker_type} finished for card #{card_id}. "
+    note += f"Elapsed: {elapsed:.0f}s."
+    api_note(card_id, note, author="runner")
+
+    # Advance to next column
+    next_col = _get_next_column(worker.col_config["id"])
+    if next_col:
+        api_patch(card_id, {"column": next_col})
+        api_note(card_id, f"Moved to {next_col} by pipeline runner.", author="runner")
+        notify(f"✅ Card #{card_id} moved to *{next_col}*")
+
+
+def _get_next_column(current_col: str) -> Optional[str]:
+    """Map column flow. Groom → Ready, In Progress → Review, Review → Done."""
+    flow = {
+        "spec": "groom",
+        "groom": "ready",
+        "in_progress": "review",
+        "review": "done",
+    }
+    return flow.get(current_col)
+
+
+# ── Main loop ────────────────────────────────────────────────────────────────
+
+class PipelineRunner:
+    def __init__(self):
+        self.active_workers: dict[str, Worker] = {}  # card_id → Worker
+        self.last_poll = 0
+
+    def _dispatch_card(self, card: dict, col_config: dict):
+        """Dispatch a worker for a card in a trigger column."""
+        card_id = card["id"]
+
+        # Skip if already being worked
+        if card_id in self.active_workers:
+            return
+
+        # Skip if card already has an agent running
+        if card.get("agent_session_id"):
+            # Check if PID is still alive
+            pid_str = card["agent_session_id"]
+            try:
+                pid = int(pid_str)
+                os.kill(pid, 0)
+                self.active_workers[card_id] = Worker(card_id, col_config, card, "")  # placeholder
+                self.active_workers[card_id].pid = pid
+                return  # already running
+            except (ProcessLookupError, ValueError):
+                pass  # PID dead, continue
+
+        print(f"[runner] Dispatching {col_config.get('worker', 'hermes')} for card {card_id}: {card['title']}")
+
+        # Draft context
+        context = draft_context(col_config, card, TALARIA_HOME)
+        worker = Worker(card_id, col_config, card, context)
+
+        if not worker.spawn():
+            api_note(card_id, f"[runner] Failed to spawn worker: {worker.worker_type}. Check binary paths.", author="runner")
+            return
+
+        self.active_workers[card_id] = worker
+
+        # Update card with PID
+        api_patch(card_id, {"agent_session_id": str(worker.pid)})
+        api_note(card_id, f"[runner] {worker.worker_type} spawned (PID {worker.pid}) at {worker.started_at}", author="runner")
+        notify(f"🤖 *{worker.worker_type}* dispatched: *{card['title']}*\nCard: #{card_id}")
+
+    def _check_workers(self):
+        """Poll active workers, handle completions."""
+        done = []
+        for card_id, worker in self.active_workers.items():
+            if worker.is_done():
+                handle_worker_done(worker)
+                done.append(card_id)
+
+        for card_id in done:
+            del self.active_workers[card_id]
+
+    def run(self, poll_interval: int = POLL_INTERVAL, max_concurrent: int = MAX_CONCURRENT):
+        print(f"[runner] Talaria Pipeline Runner started")
+        print(f"[runner] TALARIA_HOME: {TALARIA_HOME}")
+        print(f"[runner] TALARIA_WORK_DIR: {TALARIA_WORK_DIR}")
+        print(f"[runner] Max concurrent: {max_concurrent}, poll interval: {poll_interval}s")
+        print(f"[runner] Workers: hermes ({HERMES_BINARY}), claude-code ({CLAUDE_CODE_BINARY}), codex ({CODEX_BINARY})")
+
+        running = True
+        def signal_handler(sig, frame):
+            nonlocal running
+            print("[runner] Shutting down...")
+            running = False
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+        while running:
+            # Check workers first
+            self._check_workers()
+
+            # Then try to dispatch new work
+            board = api_board()
+            if board:
+                columns = {c["id"]: c for c in board.get("columns", [])}
+                cards = board.get("cards", [])
+
+                active_count = len(self.active_workers)
+
+                for card in cards:
+                    if active_count >= max_concurrent:
+                        break
+
+                    col_id = card.get("column")
+                    col_config = columns.get(col_id, {})
+
+                    if col_config.get("trigger") == "agent_spawn":
+                        self._dispatch_card(card, col_config)
+
+            # Sleep between polls
+            for _ in range(poll_interval):
+                if not running:
+                    break
+                time.sleep(1)
+
+        # Drain active workers on shutdown
+        print(f"[runner] Waiting for {len(self.active_workers)} active workers to finish...")
+        while self.active_workers:
+            self._check_workers()
+            time.sleep(1)
+        print("[runner] Done.")
 
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Talaria Agent Watcher")
-    parser.add_argument("--watch-interval", type=int, default=15, help="Queue check interval (seconds)")
-    parser.add_argument("--dispatch-interval", type=int, default=60, help="Min seconds between dispatches")
-    parser.add_argument("--max-concurrent", type=int, default=None, help="Max concurrent agents (default: from TALARIA_MAX_CONCURRENT env)")
+    parser = argparse.ArgumentParser(description="Talaria Pipeline Runner")
+    parser.add_argument("--poll-interval", type=int, default=POLL_INTERVAL)
+    parser.add_argument("--max-concurrent", type=int, default=MAX_CONCURRENT)
     args = parser.parse_args()
 
-    run(
-        watch_interval=args.watch_interval,
-        dispatch_interval=args.dispatch_interval,
-        max_concurrent=args.max_concurrent,
-    )
+    runner = PipelineRunner()
+    runner.run(poll_interval=args.poll_interval, max_concurrent=args.max_concurrent)
