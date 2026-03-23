@@ -4,6 +4,8 @@ Talaria — Lightweight kanban for agentic team coordination.
 
 import json
 import os
+import re
+import subprocess
 import uuid
 import threading
 from datetime import datetime, timezone
@@ -50,14 +52,96 @@ def _append_log(entry: dict):
     with open(LOG_FILE, "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
+def _slugify(text: str) -> str:
+    """Convert text to a lowercase hyphen-separated slug (max 40 chars)."""
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9]+', '-', text)
+    return text.strip('-')[:40]
+
+
+def _create_worktree(card: dict) -> None:
+    """Create a git worktree when a card enters In Progress."""
+    card_id = card["id"]
+    slug = _slugify(card.get("title", card_id))
+    branch_name = f"{card_id}-{slug}"
+    worktree_path = BASE_DIR / f"{card_id}-{slug}"
+    base_branch = card.get("base_branch", "main")
+
+    try:
+        # Check if branch already exists
+        existing = subprocess.run(
+            ["git", "branch", "--list", branch_name],
+            cwd=str(BASE_DIR), capture_output=True, text=True,
+        )
+        if existing.stdout.strip():
+            # Branch exists — attach worktree to it
+            subprocess.run(
+                ["git", "worktree", "add", str(worktree_path), branch_name],
+                cwd=str(BASE_DIR), check=True, capture_output=True, text=True,
+            )
+        else:
+            subprocess.run(
+                ["git", "worktree", "add", "-b", branch_name, str(worktree_path), base_branch],
+                cwd=str(BASE_DIR), check=True, capture_output=True, text=True,
+            )
+        card["worktree_path"] = str(worktree_path)
+        card["branch_name"] = branch_name
+        print(f"[talaria] Worktree created: {worktree_path} (branch: {branch_name})")
+    except subprocess.CalledProcessError as e:
+        print(f"[talaria] Worktree creation failed for {card_id}: {e.stderr}")
+    except Exception as e:
+        print(f"[talaria] Worktree creation error for {card_id}: {e}")
+
+
+def _cleanup_worktree(card: dict) -> None:
+    """Merge branch to main and delete worktree when a card enters Done."""
+    branch_name = card.get("branch_name")
+    worktree_path = card.get("worktree_path")
+    if not branch_name:
+        return
+
+    try:
+        # Merge branch into main
+        result = subprocess.run(
+            ["git", "merge", "--no-ff", branch_name,
+             "-m", f"Merge {branch_name} (talaria #{card['id']})"],
+            cwd=str(BASE_DIR), capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            print(f"[talaria] Merge conflict for {branch_name}: {result.stderr}")
+            return  # Leave worktree in place for manual resolution
+
+        # Remove worktree
+        if worktree_path:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", worktree_path],
+                cwd=str(BASE_DIR), capture_output=True, text=True,
+            )
+
+        # Delete the branch
+        subprocess.run(
+            ["git", "branch", "-d", branch_name],
+            cwd=str(BASE_DIR), capture_output=True, text=True,
+        )
+        print(f"[talaria] Worktree cleaned up: {branch_name}")
+    except Exception as e:
+        print(f"[talaria] Worktree cleanup error for {card.get('id')}: {e}")
+
+
 def _trigger_action(column: dict, card: dict, data: dict):
     """Fire side-effects when a card enters a trigger column."""
     trigger = column.get("trigger")
-    if not trigger:
-        return
-
     col_id = column["id"]
     col_name = column["name"]
+
+    # Worktree lifecycle management
+    if col_id == "in_progress":
+        _create_worktree(card)
+    elif col_id == "done":
+        _cleanup_worktree(card)
+
+    if not trigger:
+        return
 
     if trigger == "agent_spawn":
         _queue_agent(card)
@@ -157,7 +241,8 @@ def update_card(card_id):
     body = request.json
 
     # Apply updates
-    for key in ("title", "description", "priority", "assignee", "labels", "agent_session_id"):
+    for key in ("title", "description", "priority", "assignee", "labels", "agent_session_id",
+                "base_branch", "worktree_path", "branch_name"):
         if key in body:
             card[key] = body[key]
 
