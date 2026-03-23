@@ -6,6 +6,10 @@
 agent_queue.json
 logs/
 talaria.json.bak
+kanban.json.bak
+
+# Git worktrees (created for in_progress cards: {card_id}-{slug}/)
+*-*/
 
 # Python
 __pycache__/

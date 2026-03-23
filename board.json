@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "name": "Talaria",
+    "version": "1.0",
+    "created": "2026-03-21T00:00:00Z"
+  },
+  "columns": [
+    {
+      "id": "backlog",
+      "name": "Backlog",
+      "trigger": null
+    },
+    {
+      "id": "spec",
+      "name": "Spec",
+      "trigger": "agent_spawn",
+      "worker": "claude-code",
+      "context_files": [
+        "talaria.md",
+        "spec-guide.md"
+      ]
+    },
+    {
+      "id": "groom",
+      "name": "Groom",
+      "trigger": "agent_spawn",
+      "worker": "claude-code",
+      "context_files": [
+        "talaria.md",
+        "groom-guide.md"
+      ]
+    },
+    {
+      "id": "ready",
+      "name": "Ready",
+      "trigger": null
+    },
+    {
+      "id": "in_progress",
+      "name": "In Progress",
+      "trigger": "agent_spawn",
+      "worker": "claude-code",
+      "context_files": [
+        "talaria.md",
+        "coding-guide.md"
+      ]
+    },
+    {
+      "id": "review",
+      "name": "Review",
+      "trigger": "github_issue"
+    },
+    {
+      "id": "done",
+      "name": "Done",
+      "trigger": "notify"
+    }
+  ]
+}

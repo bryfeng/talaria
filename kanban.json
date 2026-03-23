@@ -91,7 +91,7 @@
       "id": "d6b8818c",
       "title": "GitHub issue sync",
       "description": "Add a trigger that creates a GitHub issue when a card enters a column. Configure via GITHUB_REPO and GITHUB_TOKEN env vars.",
-      "column": "groom",
+      "column": "ready",
       "priority": "low",
       "assignee": "",
       "labels": [
@@ -100,7 +100,7 @@
         "integrations"
       ],
       "created_at": "2026-03-22T04:08:04.689391+00:00",
-      "updated_at": "2026-03-23T01:03:37.972330+00:00",
+      "updated_at": "2026-03-23T01:05:02.262192+00:00",
       "agent_session_id": "63865",
       "status_notes": [
         {
@@ -132,6 +132,24 @@
           "text": "[runner] claude-code spawned (PID 63865) at 2026-03-23T01:03:37.957782+00:00",
           "author": "runner",
           "ts": "2026-03-23T01:03:37.972318+00:00"
+        },
+        {
+          "id": "ef982d23",
+          "text": "Implemented GitHub issue sync: added _create_github_issue() function that fires when a card enters a column with trigger=github_issue or github_repo set. Reads GITHUB_TOKEN and GITHUB_REPO from env vars; supports per-column github_repo override via column PATCH API. Issue body includes card description and a link back to the Talaria card ID. Labels (minus priority labels) are forwarded to the GitHub issue.",
+          "author": "hermes",
+          "ts": "2026-03-23T01:04:47.030513+00:00"
+        },
+        {
+          "id": "a24b386e",
+          "text": "[runner] Worker claude-code finished for card #d6b8818c. Elapsed: 84s.",
+          "author": "runner",
+          "ts": "2026-03-23T01:05:02.248724+00:00"
+        },
+        {
+          "id": "9e0cb706",
+          "text": "Moved to ready by pipeline runner.",
+          "author": "runner",
+          "ts": "2026-03-23T01:05:02.262184+00:00"
         }
       ]
     },
