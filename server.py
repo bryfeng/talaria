@@ -352,6 +352,7 @@ def _cleanup_worktree(card: dict) -> None:
         # Clear worktree fields from card so they're not stale
         card["worktree_path"] = None
         card["branch_name"] = None
+        card["agent_session_id"] = None
     except Exception as e:
         print(f"[talaria] Worktree cleanup error for {card.get('id')}: {e}")
 
@@ -366,6 +367,8 @@ def _trigger_action(column: dict, card: dict, board: dict):
         _create_worktree(card)
     elif col_id == "done":
         _cleanup_worktree(card)
+        # Always clear agent_session_id when entering done
+        card["agent_session_id"] = None
 
     if not trigger:
         return

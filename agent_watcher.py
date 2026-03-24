@@ -36,6 +36,7 @@ TALARIA_PORT = int(os.getenv("TALARIA_PORT", "8400"))
 TALARIA_WORK_DIR = os.getenv("TALARIA_WORK_DIR", os.path.expanduser("~/talaria"))
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "2"))
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "15"))
+AUTO_SUMMARY = os.getenv("AUTO_SUMMARY", "").lower() in ("1", "true", "yes")
 
 # Agent binaries
 HERMES_BINARY = os.getenv("HERMES_AGENT_PATH",
@@ -126,6 +127,93 @@ def notify(msg: str):
         urllib.request.urlopen(req, timeout=10)
     except Exception:
         pass
+
+
+# ── Auto-summary ──────────────────────────────────────────────────────────────
+
+def _get_git_diff(worktree_path: str) -> str:
+    """Return a compact git diff for the worktree (stat + truncated patch)."""
+    try:
+        for base in ("main", "master"):
+            stat = subprocess.run(
+                ["git", "diff", f"{base}...HEAD", "--stat"],
+                cwd=worktree_path, capture_output=True, text=True, timeout=30,
+            )
+            if stat.returncode == 0 and stat.stdout.strip():
+                patch = subprocess.run(
+                    ["git", "diff", f"{base}...HEAD"],
+                    cwd=worktree_path, capture_output=True, text=True, timeout=30,
+                )
+                diff_text = patch.stdout[:3000] if patch.returncode == 0 else ""
+                return f"Stat:\n{stat.stdout.strip()}\n\nDiff:\n{diff_text}"
+        # Fallback: recent commits
+        log = subprocess.run(
+            ["git", "log", "--oneline", "-10"],
+            cwd=worktree_path, capture_output=True, text=True, timeout=30,
+        )
+        if log.returncode == 0 and log.stdout.strip():
+            return f"Recent commits:\n{log.stdout.strip()}"
+    except Exception as e:
+        return f"(could not get git info: {e})"
+    return "(no git changes found)"
+
+
+def generate_auto_summary(card: dict, phase: str) -> Optional[str]:
+    """Call the auxiliary LLM to produce a brief summary for review or done entry.
+
+    Returns the summary string, or None if AUTO_SUMMARY is off / no worktree /
+    no API key / the call fails.
+    """
+    if not AUTO_SUMMARY:
+        return None
+    worktree_path = card.get("worktree_path")
+    if not worktree_path:
+        return None
+
+    api_key = os.getenv("MINIMAX_API_KEY") or os.getenv("LLM_API_KEY")
+    base_url = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1")
+    model = os.getenv("LLM_MODEL", "MiniMax-M2.7")
+
+    if not api_key:
+        print("[runner] AUTO_SUMMARY enabled but no MINIMAX_API_KEY / LLM_API_KEY found; skipping.")
+        return None
+
+    card_title = card.get("title", "Untitled")
+    card_desc = card.get("description", "(no description)")
+    git_info = _get_git_diff(worktree_path)
+
+    if phase == "review":
+        user_msg = (
+            f"Card: {card_title}\n\n"
+            f"Description:\n{card_desc}\n\n"
+            f"Git changes:\n{git_info}\n\n"
+            "Write a concise 2-3 sentence summary of what code changes were made and why. "
+            "Focus on what a reviewer needs to know before approving."
+        )
+    else:  # done
+        user_msg = (
+            f"Card: {card_title}\n\n"
+            f"Description:\n{card_desc}\n\n"
+            "Write a concise 1-2 sentence summary of what was accomplished."
+        )
+
+    try:
+        url = f"{base_url.rstrip('/')}/chat/completions"
+        body = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": user_msg}],
+            "max_tokens": 200,
+        }).encode()
+        req = urllib.request.Request(
+            url, data=body,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as r:
+            resp = json.loads(r.read())
+            return resp["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"[runner] Auto-summary LLM call failed: {e}")
+        return None
 
 
 # ── Context drafting ─────────────────────────────────────────────────────────
@@ -495,9 +583,29 @@ class PipelineRunner:
         for card_id in done:
             del self.active_workers[card_id]
 
+    def _run_done_summary(self, card: dict):
+        """Append an [auto-summary] note when a card enters Done, if not already present."""
+        if not AUTO_SUMMARY or not card.get("worktree_path"):
+            return
+        notes = card.get("status_notes", [])
+        if any("[auto-summary]" in n.get("text", "") for n in notes):
+            return  # already summarized
+        summary = generate_auto_summary(card, "done")
+        if summary:
+            api_note(card["id"], f"[auto-summary] {summary}", author="runner")
+
     def _run_review_gate(self, card: dict):
         """Run tests for a card in Review. Advance to Done on pass, back to In Progress on fail."""
         card_id = card["id"]
+
+        # Auto-summary on review entry (only once — skip if note already exists)
+        if AUTO_SUMMARY and card.get("worktree_path"):
+            notes = card.get("status_notes", [])
+            if not any("[auto-summary]" in n.get("text", "") for n in notes):
+                summary = generate_auto_summary(card, "review")
+                if summary:
+                    api_note(card_id, f"[auto-summary] {summary}", author="runner")
+
         tests = card.get("tests")
 
         if not tests:
@@ -593,6 +701,11 @@ class PipelineRunner:
                     # Review column: run CI gate if tests are defined
                     if col_id == "review":
                         self._run_review_gate(card)
+                        continue
+
+                    # Done column: append auto-summary if not already present
+                    if col_id == "done":
+                        self._run_done_summary(card)
                         continue
 
                     if col_config.get("trigger") == "agent_spawn":

@@ -173,6 +173,21 @@
     }
     .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     .card.dragging { opacity: 0.4; transform: rotate(2deg); }
+    .card.card-running {
+      border-left: 3px solid var(--col-inprogress);
+    }
+    .runner-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--col-inprogress);
+      animation: runner-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes runner-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
 
     .card-top {
       display: flex;
@@ -836,6 +851,15 @@ let repos = [];
 let selectedRepo = "";  // "" = all repos
 let currentCardId = null;
 
+// ── Board polling (real-time updates) ──
+async function loadBoard() {
+  const data = await fetchJSON("/api/board").catch(() => null);
+  if (!data) return;
+  board = data;
+  renderBoard();
+  loadActivity();
+}
+
 // ── Init ──
 async function init() {
   const [data, repoData] = await Promise.all([
@@ -847,6 +871,7 @@ async function init() {
   renderRepoBar();
   renderBoard();
   loadActivity();
+  setInterval(loadBoard, 10000);  // real-time board + activity updates
   setInterval(loadActivity, 30000);
 }
 
@@ -981,6 +1006,7 @@ function renderCard(card) {
         ${labels}
       </div>
       <div class="card-meta">
+        ${card.agent_session_id ? `<span class="runner-dot" title="Agent running (PID ${card.agent_session_id})"></span>` : ""}
         <div class="priority-dot" data-p="${card.priority || 'medium'}"></div>
         ${card.assignee ? `<span class="assignee-chip">${escapeHtml(card.assignee)}</span>` : ""}
         ${(card.cost_log && card.cost_log.length) ? `<span class="card-cost" title="Agent cost">$${card.cost_log.reduce((s,e)=>s+(e.cost_usd||0),0).toFixed(4)}</span>` : ""}
@@ -988,6 +1014,11 @@ function renderCard(card) {
       </div>
     </div>
   `;
+
+  // Add running class if agent is active
+  if (card.agent_session_id) {
+    el.classList.add("card-running");
+  }
 
   // Remove existing card with same id if re-rendering
   const existing = document.getElementById("card-" + card.id);
