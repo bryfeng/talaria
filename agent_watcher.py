@@ -163,17 +163,32 @@ def draft_context(col_config: dict, card: dict, home: Path) -> str:
         else:
             lines.append(f"## {ctx_file} [NOT FOUND: {path}]")
             lines.append("")
-
-    # Finally, card spec
+    # Card spec — always included
     lines.append("## Card Spec")
     lines.append(f"**Title:** {card.get('title', 'Untitled')}")
     lines.append(f"**ID:** {card['id']}")
+    lines.append(f"**Priority:** {card.get('priority', 'none')}")
+    labels = card.get('labels', [])
+    if labels:
+        lines.append(f"**Labels:** {', '.join(labels)}")
     lines.append("")
+
     desc = card.get("description", "")
     if desc:
         lines.append(desc)
     else:
         lines.append("(No description provided)")
+
+    # Append existing status notes for context
+    notes = card.get("status_notes", [])
+    if notes:
+        lines.append("")
+        lines.append("## Status Notes")
+        for note in notes[-5:]:  # last 5 notes to keep context lean
+            author = note.get("author", "unknown")
+            text = note.get("text", "")
+            ts = note.get("ts", "")[:10]
+            lines.append(f"- **{author}** [{ts}]: {text[:200]}")
 
     # Instructions from column config
     if col_config.get("instructions"):

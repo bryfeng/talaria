@@ -8,6 +8,7 @@ Commands:
   talaria move <card-id> <col>  Move a card to a column
   talaria log <card-id>         Show activity log / notes for a card
   talaria context <card-id>     Show full card context (for agents)
+  talaria note <card-id> <text> Add a status note to a card
 """
 
 import json
@@ -113,12 +114,23 @@ def cmd_context(args):
     print(json.dumps(card, indent=2))
 
 
+def cmd_note(args):
+    if len(args) < 2:
+        print(json.dumps({"error": "Usage: talaria note <card-id> <text>"}), file=sys.stderr)
+        sys.exit(1)
+    card_id = args[0]
+    text = " ".join(args[1:])
+    note = _request("POST", f"/api/card/{card_id}/note", {"text": text, "author": "hermes"})
+    print(json.dumps(note))
+
+
 COMMANDS = {
     "list": cmd_list,
     "create": cmd_create,
     "move": cmd_move,
     "log": cmd_log,
     "context": cmd_context,
+    "note": cmd_note,
 }
 
 
