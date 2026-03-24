@@ -31,6 +31,8 @@ from talaria.board import (
 )
 from talaria.triggers import (
     _trigger_action,
+    _queue_agent,
+    _notify_telegram,
     AGENT_QUEUE,
     AGENT_QUEUE_LOCK,
 )
