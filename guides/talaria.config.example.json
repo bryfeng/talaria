@@ -1,0 +1,40 @@
+{
+  "$schema": "https://talaria.example.com/config.schema.json",
+  "name": "my-project",
+  "port": 8400,
+  "github": {
+    "repo": "owner/repository",
+    "token_env": "GITHUB_TOKEN"
+  },
+  "telegram": {
+    "bot_token_env": "TELEGRAM_BOT_TOKEN",
+    "home_channel_id": "123456789"
+  },
+  "agents": {
+    "default_worker": "claude-code",
+    "max_concurrent": 2,
+    "poll_interval_seconds": 15,
+    "hermes": {
+      "model": "anthropic/claude-opus-4.6",
+      "api_key_env": "ANTHROPIC_API_KEY"
+    },
+    "claude_code": {
+      "binary": "claude",
+      "think": true
+    }
+  },
+  "ngrok": {
+    "enabled": false,
+    "auth_token_env": "NGROK_AUTHTOKEN"
+  },
+  "columns": {
+    "done": {
+      "auto_merge": true,
+      "auto_cleanup": true
+    },
+    "in_progress": {
+      "create_worktree": true,
+      "create_branch": true
+    }
+  }
+}

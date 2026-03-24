@@ -1,0 +1,64 @@
+# Talaria .dockerignore — keep the build context lean
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python bytecode
+__pycache__
+*.py[cod]
+*.pyc
+*.egg-info
+.eggs
+
+# Virtual environments
+venv
+.venv
+.env
+.env.*
+
+# Logs (generated at runtime)
+logs
+
+# Kanban board files — these are runtime state, not source
+board.json
+agent_queue.json
+
+# cards/ — per-task specs; heavy and not needed inside the image
+cards/
+
+# Worktrees (git worktrees / GitHub Codespaces feature branches)
+**/worktrees
+**/*.worktree
+
+# Test / CI artifacts
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+.coverage
+*.cover
+
+# IDE / editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Docker files — exclude themselves to avoid confusing docker build
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Documentation (not needed for runtime)
+*.md
+docs/
+
+# Optional heavy dev tools
+talaria_cli.py

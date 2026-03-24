@@ -9,7 +9,7 @@
     {
       "id": "backlog",
       "name": "Backlog",
-      "trigger": null
+      "trigger": "notify"
     },
     {
       "id": "spec",
@@ -54,7 +54,8 @@
     {
       "id": "done",
       "name": "Done",
-      "trigger": "notify"
+      "trigger": "notify",
+      "webhook_url": "https://example.com/hook"
     }
   ]
 }
