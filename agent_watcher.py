@@ -325,6 +325,33 @@ class _ProcessWrapper:
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
+def _run_ci_tests(card_id: str, tests: dict) -> tuple:
+    """Run the CI test command for a card. Returns (passed: bool, output: str)."""
+    command = tests.get("command", "")
+    pass_if = tests.get("pass_if", "exit_0")
+
+    if not command:
+        return True, "(no command configured)"
+
+    print(f"[runner] Running CI tests for card {card_id}: {command}")
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        output = (result.stdout + result.stderr).strip()
+        passed = result.returncode == 0 if pass_if == "exit_0" else result.returncode == 0
+        print(f"[runner] CI tests for {card_id}: exit={result.returncode}, passed={passed}")
+        return passed, output
+    except subprocess.TimeoutExpired:
+        return False, "Test command timed out after 300 seconds."
+    except Exception as e:
+        return False, f"Test command failed to run: {e}"
+
+
 def handle_worker_done(worker: Worker, success: bool = True):
     """Called when a worker finishes. Updates the card and advances the pipeline."""
     worker.cleanup()
@@ -349,10 +376,33 @@ def handle_worker_done(worker: Worker, success: bool = True):
 
     # Advance to next column
     next_col = _get_next_column(worker.col_config["id"])
-    if next_col:
-        api_patch(card_id, {"column": next_col})
-        api_note(card_id, f"Moved to {next_col} by pipeline runner.", author="runner")
-        notify(f"✅ Card #{card_id} moved to *{next_col}*")
+    if not next_col:
+        return
+
+    # CI gate: when advancing to review, run tests if configured
+    if next_col == "review":
+        card = api_get(card_id)
+        tests = card.get("tests") if card else None
+        if tests and isinstance(tests, dict) and tests.get("command"):
+            api_patch(card_id, {"column": "review"})
+            api_note(card_id, "Moved to review by pipeline runner.", author="runner")
+            notify(f"🔬 Card #{card_id} entered *review* — running CI tests...")
+
+            passed, output = _run_ci_tests(card_id, tests)
+
+            if passed:
+                api_patch(card_id, {"column": "done"})
+                api_note(card_id, f"[CI] Tests passed. Auto-advanced to done.\n```\n{output[:2000]}\n```", author="runner")
+                notify(f"✅ Card #{card_id} CI passed — moved to *done*")
+            else:
+                api_patch(card_id, {"column": "in_progress"})
+                api_note(card_id, f"[CI] Tests failed. Moved back to in_progress.\n```\n{output[:2000]}\n```", author="runner")
+                notify(f"❌ Card #{card_id} CI failed — moved back to *in_progress*")
+            return
+
+    api_patch(card_id, {"column": next_col})
+    api_note(card_id, f"Moved to {next_col} by pipeline runner.", author="runner")
+    notify(f"✅ Card #{card_id} moved to *{next_col}*")
 
 
 def _get_next_column(current_col: str) -> Optional[str]:
@@ -426,6 +476,67 @@ class PipelineRunner:
         for card_id in done:
             del self.active_workers[card_id]
 
+    def _run_review_gate(self, card: dict):
+        """Run tests for a card in Review. Advance to Done on pass, back to In Progress on fail."""
+        card_id = card["id"]
+        tests = card.get("tests")
+
+        if not tests:
+            # No tests defined — auto-advance to Done
+            api_patch(card_id, {"column": "done"})
+            api_note(card_id, "[review-gate] No tests defined — auto-advancing to Done.", author="runner")
+            notify(f"✅ Card #{card_id} passed review (no tests defined)")
+            return
+
+        command = tests.get("command")
+        pass_if = tests.get("pass_if", "exit_0")
+
+        if not command:
+            api_note(card_id, "[review-gate] tests.command is missing — cannot run.", author="runner")
+            return
+
+        # Run the test command in the card's worktree or TALARIA_WORK_DIR
+        worktree = card.get("worktree_path") or TALARIA_WORK_DIR
+        worktree_path = Path(worktree) if worktree else Path(TALARIA_WORK_DIR)
+
+        print(f"[runner] Running review tests for {card_id}: {command}")
+        api_note(card_id, f"[review-gate] Running tests: `{command}`", author="runner")
+
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                cwd=str(worktree_path),
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            exit_code = result.returncode
+        except subprocess.TimeoutExpired:
+            api_note(card_id, f"[review-gate] TIMEOUT — test command exceeded 300s.", author="runner")
+            api_patch(card_id, {"column": "in_progress"})
+            notify(f"❌ Card #{card_id} review timed out (300s) — back to In Progress.")
+            return
+        except Exception as e:
+            api_note(card_id, f"[review-gate] ERROR running tests: {e}", author="runner")
+            api_patch(card_id, {"column": "in_progress"})
+            notify(f"❌ Card #{card_id} review error: {e} — back to In Progress.")
+            return
+
+        passed = (exit_code == 0) if pass_if == "exit_0" else False
+        output = (result.stdout + "\n" + result.stderr).strip()
+
+        if passed:
+            summary = output[:500] if output else "(no output)"
+            api_note(card_id, f"[review-gate] ✅ Tests passed (exit {exit_code}). Output: {summary}", author="runner")
+            api_patch(card_id, {"column": "done"})
+            notify(f"✅ Card #{card_id} passed review — tests passed, moved to Done.")
+        else:
+            summary = output[:1000] if output else f"(exit {exit_code})"
+            api_note(card_id, f"[review-gate] ❌ Tests FAILED (exit {exit_code}). Output:\n{output[:2000]}", author="runner")
+            api_patch(card_id, {"column": "in_progress"})
+            notify(f"❌ Card #{card_id} tests failed — back to In Progress. Output:\n{summary[:500]}")
+
     def run(self, poll_interval: int = POLL_INTERVAL, max_concurrent: int = MAX_CONCURRENT):
         print(f"[runner] Talaria Pipeline Runner started")
         print(f"[runner] TALARIA_HOME: {TALARIA_HOME}")
@@ -459,6 +570,11 @@ class PipelineRunner:
 
                     col_id = card.get("column")
                     col_config = columns.get(col_id, {})
+
+                    # Review column: run CI gate if tests are defined
+                    if col_id == "review":
+                        self._run_review_gate(card)
+                        continue
 
                     if col_config.get("trigger") == "agent_spawn":
                         self._dispatch_card(card, col_config)

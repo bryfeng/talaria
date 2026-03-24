@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "repos": [
+    {
+      "name": "talaria",
+      "path": "/Users/bryanfeng/talaria",
+      "talaria_instance_path": "~/.talaria/talaria"
+    }
+  ]
+}

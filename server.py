@@ -16,9 +16,46 @@ from flask import Flask, send_from_directory, jsonify, request
 BASE_DIR = Path(__file__).parent
 CARDS_DIR = BASE_DIR / "cards"
 BOARD_FILE = BASE_DIR / "board.json"
+CONFIG_FILE = BASE_DIR / "talaria.config.json"
+TALARIA_HOME = Path(os.getenv("TALARIA_HOME", os.path.expanduser("~/.talaria/talaria")))
 LOG_FILE = BASE_DIR / "logs" / "talaria.log"
 AGENT_QUEUE = BASE_DIR / "agent_queue.json"
 AGENT_QUEUE_LOCK = threading.Lock()
+
+
+# ── config I/O ─────────────────────────────────────────────────────────────────
+
+def _load_config() -> dict:
+    """Load talaria.config.json from BASE_DIR or TALARIA_HOME."""
+    for path in [CONFIG_FILE, TALARIA_HOME / "talaria.config.json"]:
+        if path.exists():
+            with open(path) as f:
+                return json.load(f)
+    return {}
+
+
+def _get_repos() -> list:
+    """Return repos list from config (normalises old object format)."""
+    config = _load_config()
+    repos = config.get("repos", [])
+    if isinstance(repos, dict):
+        return [{"name": k, **v} for k, v in repos.items()]
+    return repos
+
+
+def _get_repo(name: str):
+    """Return a repo entry by name, or None."""
+    return next((r for r in _get_repos() if r.get("name") == name), None)
+
+
+def _repo_dir(card: dict) -> Path:
+    """Return the git repo root for a card, falling back to BASE_DIR."""
+    repo_name = card.get("repo")
+    if repo_name:
+        repo = _get_repo(repo_name)
+        if repo and repo.get("path"):
+            return Path(repo["path"]).expanduser()
+    return BASE_DIR
 
 app = Flask(__name__, static_folder=str(BASE_DIR / "static"))
 app.config["JSON_SORT_KEYS"] = False
@@ -99,7 +136,8 @@ def _card_to_md(card: dict) -> str:
     fm_keys = [
         "id", "title", "column", "priority", "assignee", "labels",
         "created_at", "updated_at", "worktree_path", "branch_name",
-        "agent_session_id", "base_branch", "cost_log", "github_issue",
+        "agent_session_id", "base_branch", "cost_log", "github_issue", "repo",
+        "tests", "due_date",
     ]
     fm = {}
     for k in fm_keys:
@@ -176,10 +214,16 @@ def _save_board(data: dict) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+def _slim_card(card: dict) -> dict:
+    """Strip heavy derived fields from a card for board-level reads."""
+    slim = {k: v for k, v in card.items() if k != "status_notes"}
+    return slim
+
+
 def _full_board() -> dict:
-    """Return the full board response: meta + columns + all cards."""
+    """Return the full board response: meta + columns + all cards (slim)."""
     board = _load_board()
-    board["cards"] = _all_cards()
+    board["cards"] = [_slim_card(c) for c in _all_cards()]
     return board
 
 
@@ -212,20 +256,22 @@ def _slugify(text: str) -> str:
 
 def _create_worktree(card: dict) -> None:
     """Create a git worktree when a card enters In Progress.
-    
-    Idempotent: if the worktree already exists, links it to the card without error.
+
+    Uses the repo path from the card's 'repo' field (via talaria.config.json),
+    falling back to BASE_DIR. Idempotent if the worktree already exists.
     """
     card_id = card["id"]
     slug = _slugify(card.get("title", card_id))
     branch_name = f"{card_id}-{slug}"
-    worktree_path = BASE_DIR / f"{card_id}-{slug}"
+    repo_path = _repo_dir(card)
+    worktree_path = repo_path / f"{card_id}-{slug}"
     base_branch = card.get("base_branch", "main")
 
     # Check if this exact worktree already exists
     try:
         wt_list = subprocess.run(
             ["git", "worktree", "list", "--porcelain"],
-            cwd=str(BASE_DIR), capture_output=True, text=True,
+            cwd=str(repo_path), capture_output=True, text=True,
         )
         existing_paths = []
         for line in wt_list.stdout.splitlines():
@@ -245,13 +291,13 @@ def _create_worktree(card: dict) -> None:
         # Check if branch already exists
         existing = subprocess.run(
             ["git", "branch", "--list", branch_name],
-            cwd=str(BASE_DIR), capture_output=True, text=True,
+            cwd=str(repo_path), capture_output=True, text=True,
         )
         if existing.stdout.strip():
             # Branch exists — add worktree pointing to it
             result = subprocess.run(
                 ["git", "worktree", "add", str(worktree_path), branch_name],
-                cwd=str(BASE_DIR), capture_output=True, text=True,
+                cwd=str(repo_path), capture_output=True, text=True,
             )
             if result.returncode != 0:
                 # Worktree path already used by another worktree
@@ -261,7 +307,7 @@ def _create_worktree(card: dict) -> None:
             # New branch + worktree
             subprocess.run(
                 ["git", "worktree", "add", "-b", branch_name, str(worktree_path), base_branch],
-                cwd=str(BASE_DIR), check=True, capture_output=True, text=True,
+                cwd=str(repo_path), check=True, capture_output=True, text=True,
             )
         card["worktree_path"] = str(worktree_path)
         card["branch_name"] = branch_name
@@ -279,11 +325,13 @@ def _cleanup_worktree(card: dict) -> None:
     if not branch_name:
         return
 
+    repo_path = _repo_dir(card)
+
     try:
         result = subprocess.run(
             ["git", "merge", "--no-ff", branch_name,
              "-m", f"Merge {branch_name} (talaria #{card['id']})"],
-            cwd=str(BASE_DIR), capture_output=True, text=True,
+            cwd=str(repo_path), capture_output=True, text=True,
         )
         if result.returncode != 0:
             print(f"[talaria] Merge conflict for {branch_name}: {result.stderr}")
@@ -292,12 +340,12 @@ def _cleanup_worktree(card: dict) -> None:
         if worktree_path:
             subprocess.run(
                 ["git", "worktree", "remove", "--force", worktree_path],
-                cwd=str(BASE_DIR), capture_output=True, text=True,
+                cwd=str(repo_path), capture_output=True, text=True,
             )
 
         subprocess.run(
             ["git", "branch", "-d", branch_name],
-            cwd=str(BASE_DIR), capture_output=True, text=True,
+            cwd=str(repo_path), capture_output=True, text=True,
         )
         print(f"[talaria] Worktree cleaned up: {branch_name}")
 
@@ -366,19 +414,24 @@ def _queue_agent(card: dict):
             json.dump(queue, f, indent=2)
 
 def _notify_telegram(msg: str):
-    """Send a Telegram message via bot API."""
-    token=os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_HOME_CHANNEL_ID") or os.getenv("TELEGRAM_HOME_CHANNEL", "").lstrip("@")
+    """Send a Telegram message via bot API. Non-blocking — never blocks the request handler."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = (os.getenv("TELEGRAM_HOME_CHANNEL_ID") or os.getenv("TELEGRAM_HOME_CHANNEL") or "").lstrip("@")
     if not token or not chat_id:
         return
     try:
-        import urllib.request
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        data = json.dumps({"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"}).encode()
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=10)
+        import threading, urllib.request, urllib.error
+        def _send():
+            try:
+                url = f"https://api.telegram.org/bot{token}/sendMessage"
+                data = json.dumps({"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"}).encode()
+                req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=10)
+            except Exception as e:
+                print(f"[talaria] Telegram notify failed: {e}")
+        threading.Thread(target=_send, daemon=True).start()
     except Exception as e:
-        print(f"[talaria] Telegram notify failed: {e}")
+        print(f"[talaria] Telegram notify setup failed: {e}")
 
 
 def _fire_webhook(url: str, card: dict, column: dict):
@@ -454,6 +507,11 @@ def index():
 def get_board():
     return jsonify(_full_board())
 
+@app.route("/api/repos")
+def get_repos():
+    """Return repos list from talaria.config.json."""
+    return jsonify(_get_repos())
+
 @app.route("/api/card", methods=["POST"])
 def create_card():
     body = request.json
@@ -474,7 +532,7 @@ def create_card():
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "agent_session_id": None,
-        "status_notes": [],
+        "repo": body.get("repo") or None,
     }
     _save_card(card)
     _log("created", card)
@@ -499,7 +557,7 @@ def update_card(card_id):
 
     # Apply updates
     for key in ("title", "description", "priority", "assignee", "labels", "agent_session_id",
-                "base_branch", "worktree_path", "branch_name", "cost_log"):
+                "base_branch", "worktree_path", "branch_name", "cost_log", "repo", "tests"):
         if key in body:
             card[key] = body[key]
 
@@ -509,7 +567,10 @@ def update_card(card_id):
         col = next((c for c in board["columns"] if c["id"] == body["column"]), None)
         _log("moved", card, from_col=old_col, to_col=body["column"])
         if col:
-            _trigger_action(col, card, board)
+            try:
+                _trigger_action(col, card, board)
+            except Exception as e:
+                print(f"[talaria] Trigger action failed for {card_id}: {e}")
     else:
         _log("updated", card)
 
@@ -631,6 +692,12 @@ def get_activity():
 
 
 # ── static files ──────────────────────────────────────────────────────────────
+
+@app.route("/docs/<path:filename>")
+def docs_files(filename):
+    """Serve architecture docs and diagrams."""
+    return send_from_directory(BASE_DIR / "docs", filename)
+
 
 @app.route("/<path:filename>")
 def static_files(filename):
