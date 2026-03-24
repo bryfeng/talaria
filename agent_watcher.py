@@ -210,6 +210,10 @@ class Worker:
         self.pid: Optional[int] = None
         self.started_at: Optional[str] = None
         self.process: Optional[subprocess.Popen] = None
+        # Use the card's worktree path (set when entering In Progress) so agents
+        # run inside the correct repo's worktree for multi-repo cards.
+        worktree = card.get("worktree_path")
+        self.work_dir: str = worktree if worktree and Path(worktree).exists() else TALARIA_WORK_DIR
 
     @property
     def worker_type(self) -> str:
@@ -229,7 +233,7 @@ class Worker:
             "--model", os.getenv("LLM_MODEL", "MiniMax-M2.7"),
             "--base-url", os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
         ]
-        proc = subprocess.Popen(cmd, cwd=TALARIA_WORK_DIR, env=self._env())
+        proc = subprocess.Popen(cmd, cwd=self.work_dir, env=self._env())
         return proc.pid
 
     def _env(self) -> dict:
@@ -238,12 +242,12 @@ class Worker:
 
     def _spawn_claude_code(self, ctx_path: Path, goal: str) -> int:
         cmd = [CLAUDE_CODE_BINARY, "--dangerously-skip-permissions", "--print", goal]
-        proc = subprocess.Popen(cmd, cwd=TALARIA_WORK_DIR, env=self._env())
+        proc = subprocess.Popen(cmd, cwd=self.work_dir, env=self._env())
         return proc.pid
 
     def _spawn_codex(self, ctx_path: Path, goal: str) -> int:
         cmd = [CODEX_BINARY, goal]
-        proc = subprocess.Popen(cmd, cwd=TALARIA_WORK_DIR, env=self._env())
+        proc = subprocess.Popen(cmd, cwd=self.work_dir, env=self._env())
         return proc.pid
 
     def spawn(self) -> bool:
