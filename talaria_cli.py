@@ -3,17 +3,27 @@
 talaria — CLI for interacting with the Talaria kanban board.
 
 Commands:
-  talaria list                  List all cards (grouped by column)
-  talaria create <title>        Create a new card in backlog
-  talaria move <card-id> <col>  Move a card to a column
-  talaria log <card-id>         Show activity log / notes for a card
-  talaria context <card-id>     Show full card context (for agents)
-  talaria note <card-id> <text> Add a status note to a card
+  talaria list                    List all cards (grouped by column)
+  talaria status                  Show board snapshot: In Progress + Ready first
+  talaria create <title>          Create a new card in backlog
+  talaria create <title> [opts]   Create with full options
+  talaria move <card-id> <col>    Move a card to a column
+  talaria log <card-id>           Show activity log / notes for a card
+  talaria context <card-id>       Show full card context (for agents)
+  talaria note <card-id> <text>   Add a status note to a card
+
+create options:
+  -p, --priority P0|P1|P2|P3      Priority level (default: medium)
+  -c, --column COL                Target column id (default: backlog)
+  -l, --labels LABEL[,LABEL...]   Comma-separated labels
+  -d, --description TEXT          Card description
+  -r, --repo OWNER/REPO           GitHub repo for branch/issue tracking
 """
 
 import json
 import sys
 import os
+import argparse
 import urllib.request
 import urllib.error
 
@@ -66,12 +76,60 @@ def cmd_list(args):
     print(json.dumps(output, indent=2))
 
 
+def cmd_status(args):
+    """Show board snapshot: In Progress + Ready first (agent session start)."""
+    board = _request("GET", "/api/board")
+    columns = {c["id"]: c["name"] for c in board.get("columns", [])}
+    cards = board.get("cards", [])
+
+    # Group by column
+    grouped = {}
+    for card in cards:
+        col = card.get("column", "unknown")
+        grouped.setdefault(col, []).append(card)
+
+    output = {"active": [], "backlog": []}
+    priority_cols = {"in_progress", "ready"}
+    for col_id, col_name in columns.items():
+        col_cards = grouped.get(col_id, [])
+        section = "active" if col_id in priority_cols else "backlog"
+        for card in col_cards:
+            output[section].append({
+                "id": card["id"],
+                "title": card["title"],
+                "column": col_id,
+                "column_name": col_name,
+                "priority": card.get("priority", ""),
+                "labels": card.get("labels", []),
+            })
+
+    print(json.dumps(output, indent=2))
+
+
 def cmd_create(args):
-    if not args:
-        print(json.dumps({"error": "Usage: talaria create <title>"}), file=sys.stderr)
-        sys.exit(1)
-    title = " ".join(args)
-    card = _request("POST", "/api/card", {"title": title})
+    parser = argparse.ArgumentParser(prog="talaria create", description="Create a new card")
+    parser.add_argument("title", help="Card title")
+    parser.add_argument("-p", "--priority", default="medium",
+                        choices=["critical", "high", "medium", "low"],
+                        help="Priority level (default: medium)")
+    parser.add_argument("-c", "--column", default="backlog",
+                        help="Target column id (default: backlog)")
+    parser.add_argument("-l", "--labels", default="",
+                        help="Comma-separated labels")
+    parser.add_argument("-d", "--description", default="", help="Card description")
+    parser.add_argument("-r", "--repo", default="", help="GitHub repo (owner/repo)")
+    parsed = parser.parse_args(args)
+
+    labels = [l.strip() for l in parsed.labels.split(",") if l.strip()]
+    payload = {
+        "title": parsed.title,
+        "priority": parsed.priority,
+        "column": parsed.column,
+        "description": parsed.description,
+        "repo": parsed.repo or None,
+        "labels": labels,
+    }
+    card = _request("POST", "/api/card", payload)
     print(json.dumps(card, indent=2))
 
 
@@ -126,6 +184,7 @@ def cmd_note(args):
 
 COMMANDS = {
     "list": cmd_list,
+    "status": cmd_status,
     "create": cmd_create,
     "move": cmd_move,
     "log": cmd_log,

@@ -1,3 +1,4 @@
+#!/opt/homebrew/bin/python3.12
 """
 Talaria — Lightweight kanban for agentic team coordination.
 """
@@ -308,6 +309,119 @@ def _create_worktree(card: dict) -> None:
         print(f"[talaria] Worktree creation error for {card_id}: {e}")
 
 
+def _get_github_issue_info(card: dict) -> tuple[str | None, str | None, str | None]:
+    """
+    Extract GitHub repo, issue number, and issue URL from a card.
+    Returns (repo_slug, issue_number, issue_url) or (None, None, None).
+    
+    Checks:
+    1. github_issue frontmatter field (number or URL)
+    2. github_issue_url frontmatter field
+    3. URLs in the card body matching github.com/<owner>/<repo>/issues/<number>
+    """
+    import re
+    
+    # 1. Check github_issue field
+    github_issue = card.get("github_issue") or card.get("issue")
+    if github_issue:
+        if isinstance(github_issue, int):
+            repo = card.get("repo")
+            return repo, str(github_issue), None
+        # Could be a URL or a number as string
+        issue_url = github_issue if github_issue.startswith("http") else None
+        match = re.search(r"issues/(\d+)", str(github_issue))
+        if match:
+            issue_num = match.group(1)
+            repo = card.get("repo")
+            return repo, issue_num, issue_url
+    
+    # 2. Check github_issue_url field
+    github_issue_url = card.get("github_issue_url") or card.get("issue_url")
+    if github_issue_url:
+        match = re.search(r"github\.com/([^/]+/[^/]+)/issues/(\d+)", github_issue_url)
+        if match:
+            return match.group(1), match.group(2), github_issue_url
+    
+    # 3. Scan card body (description + log) for github issue URLs
+    card_text = card.get("description", "") + "\n" + card.get("log", "")
+    matches = re.findall(r"https?://github\.com/([^/\s]+/[^/\s]+)/issues/(\d+)", card_text)
+    if matches:
+        repo, num = matches[0]
+        return repo, num, f"https://github.com/{repo}/issues/{num}"
+    
+    return None, None, None
+
+
+def _get_diff_stat(repo_path: Path, branch_name: str) -> str:
+    """Get git diff --stat for a branch vs main. Returns empty string on failure."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--stat", f"main...{branch_name}"],
+            cwd=str(repo_path), capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _close_github_issue(repo: str, issue_number: str) -> bool:
+    """Close a GitHub issue via gh CLI. Returns True on success."""
+    import shlex
+    try:
+        comment = f"Closed via Talaria — delivered in commit."
+        cmd = ["gh", "issue", "close", issue_number, "--repo", repo,
+               "--comment", comment, "--reason", "completed"]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            print(f"[talaria] Closed GitHub issue {repo}#{issue_number}")
+            return True
+        else:
+            print(f"[talaria] gh issue close failed: {result.stderr.strip()}")
+    except FileNotFoundError:
+        print("[talaria] gh CLI not found — skipping issue close")
+    except Exception as e:
+        print(f"[talaria] GitHub issue close error: {e}")
+    return False
+
+
+def _send_done_summary(card: dict, diff_stat: str, gh_closed: bool, repo_path: Path):
+    """Send a rich Telegram summary when a card lands in Done."""
+    import threading
+    
+    def _send():
+        try:
+            lines = [f"✅ *Done: {card.get('title', card['id'])}*"]
+            lines.append(f"`#{card['id']}`")
+            
+            # Diff stat
+            if diff_stat:
+                # Summarize: show just the summary line(s)
+                diff_lines = diff_stat.strip().split("\n")
+                for dl in diff_lines[-5:]:  # last 5 lines max
+                    dl = dl.strip()
+                    if dl:
+                        lines.append(f"`{dl}`")
+            
+            # GitHub
+            repo = card.get("repo")
+            gh_issue = card.get("github_issue") or card.get("issue")
+            if gh_issue:
+                issue_ref = f"{repo}#{gh_issue}" if repo else f"#{gh_issue}"
+                status = "🔒 Closed" if gh_closed else "⚠️ Could not close"
+                lines.append(f"{status} {issue_ref}")
+            elif repo:
+                lines.append(f"📁 Repo: `{repo}`")
+            
+            msg = "\n".join(lines)
+            _notify_telegram(msg)
+        except Exception as e:
+            print(f"[talaria] Done summary Telegram failed: {e}")
+    
+    threading.Thread(target=_send, daemon=True).start()
+
+
 def _cleanup_worktree(card: dict) -> None:
     """Merge branch to main and delete worktree when a card enters Done."""
     branch_name = card.get("branch_name")
@@ -318,6 +432,12 @@ def _cleanup_worktree(card: dict) -> None:
     repo_path = _repo_dir(card)
 
     try:
+        # ── Get diff stat BEFORE merge (while branch changes are visible) ──
+        diff_stat = _get_diff_stat(repo_path, branch_name)
+        
+        # ── Extract GitHub issue info ──
+        gh_repo, gh_issue_num, _ = _get_github_issue_info(card)
+
         result = subprocess.run(
             ["git", "merge", "--no-ff", branch_name,
              "-m", f"Merge {branch_name} (talaria #{card['id']})"],
@@ -339,10 +459,19 @@ def _cleanup_worktree(card: dict) -> None:
         )
         print(f"[talaria] Worktree cleaned up: {branch_name}")
 
-        # Clear worktree fields from card so they're not stale
+        # ── Close GitHub issue (non-blocking) ──
+        gh_closed = False
+        if gh_repo and gh_issue_num:
+            gh_closed = _close_github_issue(gh_repo, gh_issue_num)
+        
+        # ── Clear worktree fields from card so they're not stale ──
         card["worktree_path"] = None
         card["branch_name"] = None
         card["agent_session_id"] = None
+        
+        # ── Send Telegram summary (non-blocking) ──
+        _send_done_summary(card, diff_stat, gh_closed, repo_path)
+        
     except Exception as e:
         print(f"[talaria] Worktree cleanup error for {card.get('id')}: {e}")
 
@@ -692,6 +821,20 @@ def get_activity():
                 except Exception:
                     pass
     return jsonify(entries[:50])
+
+
+@app.route("/api/arch/meta")
+def arch_meta():
+    """Return last-modified timestamps for architecture docs (for auto-refresh polling)."""
+    docs_dir = BASE_DIR / "docs"
+    result = {}
+    for filename in ["architecture.md", "architecture.excalidraw.json"]:
+        path = docs_dir / filename
+        if path.exists():
+            result[filename] = {"exists": True, "mtime": path.stat().st_mtime}
+        else:
+            result[filename] = {"exists": False}
+    return jsonify(result)
 
 
 # ── static files ──────────────────────────────────────────────────────────────

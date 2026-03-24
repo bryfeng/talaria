@@ -830,6 +830,48 @@
       cursor: pointer;
     }
     .arch-refresh-btn:hover { color: var(--text); background: var(--card); }
+
+    .arch-diagram-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 0 8px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 10px;
+    }
+    .arch-zoom-btn {
+      padding: 3px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+    }
+    .arch-zoom-btn:hover { background: var(--card-hover); }
+    .arch-zoom-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      min-width: 38px;
+      text-align: center;
+    }
+    .arch-updated {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .arch-auto-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 10px;
+      background: rgba(63,185,80,0.15);
+      color: var(--col-done);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    #arch-svg-container svg { transition: transform 0.15s; transform-origin: top center; }
   </style>
 </head>
 <body>
@@ -980,13 +1022,21 @@
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
+        <span id="arch-updated-time" class="arch-updated" title="Last modified time of architecture files"></span>
         <button class="arch-refresh-btn" onclick="refreshArch()" title="Reload diagram and docs">↻ Refresh</button>
         <button class="close-btn" onclick="closeArchModal()">✕</button>
       </div>
     </div>
     <div class="arch-modal-body">
       <div id="arch-diagram-view">
-        <div id="arch-svg-container" style="min-height:200px;display:flex;align-items:center;justify-content:center">
+        <div class="arch-diagram-toolbar">
+          <button class="arch-zoom-btn" onclick="adjustZoom(-0.2)" title="Zoom out">−</button>
+          <span class="arch-zoom-label" id="arch-zoom-pct">100%</span>
+          <button class="arch-zoom-btn" onclick="adjustZoom(0.2)" title="Zoom in">+</button>
+          <button class="arch-zoom-btn" onclick="resetZoom()" title="Reset zoom" style="font-size:11px;padding:3px 8px">Reset</button>
+          <span id="arch-auto-badge" class="arch-auto-badge" style="display:none">auto-refresh</span>
+        </div>
+        <div id="arch-svg-container" style="min-height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden">
           <span style="color:var(--text-muted)">Loading diagram…</span>
         </div>
       </div>
@@ -1492,16 +1542,20 @@ function showToast(msg) {
 
 // ── Architecture Viewer ──
 let archTabActive = 'diagram';
+let archZoom = 1.0;
+let archAutoRefreshTimer = null;
+let archLastMtime = null;
 
 async function openArchModal() {
   document.getElementById("archModal").classList.add("open");
-  // Always reload on open so diagram/docs stay fresh when files change
   if (archTabActive === 'diagram') loadArchDiagram();
   else loadArchDocs();
+  startArchAutoRefresh();
 }
 
 function closeArchModal() {
   document.getElementById("archModal").classList.remove("open");
+  stopArchAutoRefresh();
 }
 
 function refreshArch() {
@@ -1519,12 +1573,79 @@ function switchArchTab(tab) {
   else loadArchDocs();
 }
 
+function adjustZoom(delta) {
+  archZoom = Math.max(0.4, Math.min(3.0, archZoom + delta));
+  applyArchZoom();
+}
+
+function resetZoom() {
+  archZoom = 1.0;
+  applyArchZoom();
+}
+
+function applyArchZoom() {
+  document.getElementById("arch-zoom-pct").textContent = Math.round(archZoom * 100) + '%';
+  const svg = document.querySelector('#arch-svg-container svg');
+  if (svg) svg.style.transform = `scale(${archZoom})`;
+}
+
+async function startArchAutoRefresh() {
+  stopArchAutoRefresh();
+  // Fetch initial mtime baseline
+  try {
+    const meta = await fetch('/api/arch/meta').then(r => r.json());
+    archLastMtime = _archMtimeKey(meta);
+    _updateArchUpdatedTime(meta);
+  } catch { archLastMtime = null; }
+  document.getElementById("arch-auto-badge").style.display = '';
+  archAutoRefreshTimer = setInterval(async () => {
+    try {
+      const meta = await fetch('/api/arch/meta').then(r => r.json());
+      const key = _archMtimeKey(meta);
+      if (archLastMtime && key !== archLastMtime) {
+        archLastMtime = key;
+        _updateArchUpdatedTime(meta);
+        refreshArch();
+        showToast('Architecture updated');
+      } else if (!archLastMtime) {
+        archLastMtime = key;
+      }
+    } catch { /* ignore */ }
+  }, 8000);
+}
+
+function stopArchAutoRefresh() {
+  if (archAutoRefreshTimer) { clearInterval(archAutoRefreshTimer); archAutoRefreshTimer = null; }
+  document.getElementById("arch-auto-badge").style.display = 'none';
+}
+
+function _archMtimeKey(meta) {
+  return Object.values(meta).map(v => v.mtime || 0).join(',');
+}
+
+function _updateArchUpdatedTime(meta) {
+  const mds = meta['architecture.md'];
+  if (!mds || !mds.mtime) return;
+  const d = new Date(mds.mtime * 1000);
+  const rel = _relTime(d);
+  document.getElementById("arch-updated-time").textContent = 'Updated ' + rel;
+}
+
+function _relTime(d) {
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+
 async function loadArchDiagram() {
   document.getElementById("arch-svg-container").innerHTML =
     '<span style="color:var(--text-muted)">Loading diagram…</span>';
   try {
     const data = await fetch('/docs/architecture.excalidraw.json').then(r => r.json());
     document.getElementById("arch-svg-container").innerHTML = renderExcalidrawSVG(data.elements || []);
+    applyArchZoom();
   } catch {
     document.getElementById("arch-svg-container").innerHTML =
       '<span style="color:var(--text-muted)">Failed to load diagram</span>';
@@ -1676,15 +1797,27 @@ function renderExcalidrawSVG(elements) {
     const ex = el.x+ox, ey = el.y+oy, rx = el.borderRadius||0;
     const tooltip = el.text ? ` title="${x(el.text.replace(/\\n/g,'\n'))}"` : '';
     parts.push(`<g class="arch-svg-box"${tooltip}>`);
-    parts.push(`<rect x="${ex}" y="${ey}" width="${el.width}" height="${el.height}" rx="${rx}" ry="${rx}" fill="${x(el.backgroundColor||'#fff')}" stroke="${x(el.strokeColor||'#888')}" stroke-width="${el.strokeWidth||2}"/>`);
+    if (el.type === 'ellipse') {
+      const cx2 = ex + el.width/2, cy2 = ey + el.height/2;
+      parts.push(`<ellipse cx="${cx2}" cy="${cy2}" rx="${el.width/2}" ry="${el.height/2}" fill="${x(el.backgroundColor||'#fff')}" stroke="${x(el.strokeColor||'#888')}" stroke-width="${el.strokeWidth||2}"/>`);
+    } else {
+      parts.push(`<rect x="${ex}" y="${ey}" width="${el.width}" height="${el.height}" rx="${rx}" ry="${rx}" fill="${x(el.backgroundColor||'#fff')}" stroke="${x(el.strokeColor||'#888')}" stroke-width="${el.strokeWidth||2}"/>`);
+    }
     if (el.text) {
       const lines = el.text.replace(/\\n/g, '\n').split('\n');
       const fs = el.fontSize || 14, lh = fs * 1.35;
       const totalH = lines.length * lh;
-      const cx = ex + el.width/2;
-      const startY = ey + el.height/2 - totalH/2 + fs*0.85;
+      // Respect textAlign
+      const align = el.textAlign || 'center';
+      const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle';
+      const tx = align === 'left' ? ex + 8 : align === 'right' ? ex + el.width - 8 : ex + el.width/2;
+      // Respect verticalAlign
+      let startY;
+      if (el.verticalAlign === 'top') startY = ey + fs + 4;
+      else if (el.verticalAlign === 'bottom') startY = ey + el.height - totalH + fs * 0.85;
+      else startY = ey + el.height/2 - totalH/2 + fs*0.85;
       lines.forEach((line, i) => {
-        parts.push(`<text x="${cx}" y="${startY + i*lh}" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="${fs}" fill="#1a1a1a">${x(line)}</text>`);
+        parts.push(`<text x="${tx}" y="${startY + i*lh}" text-anchor="${anchor}" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="${fs}" fill="#1a1a1a">${x(line)}</text>`);
       });
     }
     parts.push(`</g>`);
@@ -1750,6 +1883,9 @@ document.addEventListener("keydown", e => {
   }
   if (e.key === "n" && !e.metaKey && !e.ctrlKey && document.activeElement.tagName === "BODY") {
     openCreateModal();
+  }
+  if (e.key === "a" && !e.metaKey && !e.ctrlKey && document.activeElement.tagName === "BODY") {
+    openArchModal();
   }
 });
 
