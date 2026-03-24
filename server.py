@@ -98,28 +98,27 @@ def _card_from_md(text: str) -> dict:
     card = dict(fm)
     card["description"] = description
 
-    # Parse log entries back into status_notes format
-    status_notes = []
-    for line in log_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        # Format: [2026-03-23 00:41:35] **author**: text
-        m = re.match(r"\[([^\]]+)\]\s+\*\*([^*]+)\*\*:\s*(.*)", line)
-        if m:
-            ts_display, author, text = m.group(1), m.group(2), m.group(3)
-            # Try to reconstruct ISO ts from display format
-            try:
-                dt = datetime.strptime(ts_display, "%Y-%m-%d %H:%M:%S")
-                ts = dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
-            except Exception:
-                ts = ts_display
-            status_notes.append({
-                "ts": ts,
-                "author": author,
-                "text": text,
-            })
-    card["status_notes"] = status_notes
+    # Parse status_notes — prefer frontmatter (handles multiline correctly)
+    # Fall back to ## Log section for existing cards
+    if "status_notes" in fm:
+        card["status_notes"] = fm["status_notes"]
+    else:
+        # Legacy: parse ## Log section line-by-line (drops multiline content)
+        status_notes = []
+        for line in log_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            m = re.match(r"\[([^\]]+)\]\s+\*\*([^*]+)\*\*:\s*(.*)", line)
+            if m:
+                ts_display, author, text = m.group(1), m.group(2), m.group(3)
+                try:
+                    dt = datetime.strptime(ts_display, "%Y-%m-%d %H:%M:%S")
+                    ts = dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                except Exception:
+                    ts = ts_display
+                status_notes.append({"ts": ts, "author": author, "text": text})
+        card["status_notes"] = status_notes
 
     # Parse cost_log from frontmatter
     if "cost_log" in fm:
@@ -145,6 +144,11 @@ def _card_to_md(card: dict) -> str:
         if v is not None and v != [] and v != "":
             fm[k] = v
 
+    # Store notes in frontmatter as YAML list (handles multiline correctly)
+    notes = card.get("status_notes", [])
+    if notes:
+        fm["status_notes"] = notes
+
     lines = []
     lines.append("---")
     lines.append(yaml.dump(fm, default_flow_style=False, sort_keys=False, allow_unicode=True).rstrip())
@@ -155,20 +159,6 @@ def _card_to_md(card: dict) -> str:
     if desc:
         lines.append(desc)
         lines.append("")
-    lines.append("")
-    lines.append("## Log")
-    lines.append("")
-
-    for note in card.get("status_notes", []):
-        ts = note.get("ts", "")
-        author = note.get("author", "user")
-        text = note.get("text", "")
-        try:
-            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            ts_display = dt.strftime("%Y-%m-%d %H:%M:%S")
-        except Exception:
-            ts_display = ts
-        lines.append(f"[{ts_display}] **{author}**: {text}")
 
     return "\n".join(lines)
 
@@ -438,8 +428,14 @@ def _notify_telegram(msg: str):
 
 
 def _fire_webhook(url: str, card: dict, column: dict):
-    """POST card data to a webhook URL when a card enters a column."""
-    import urllib.request
+    """POST card data to a webhook URL when a card enters a column.
+
+    Custom headers can be set per-column via the ``webhook_headers`` field in
+    board.json (or via PATCH /api/column/:id).  The ``Content-Type`` header is
+    always set to ``application/json`` but can be overridden.  Fires in a
+    background thread so it never blocks the request handler.
+    """
+    import threading, urllib.request
     payload = {
         "event": "card.moved",
         "column": {"id": column["id"], "name": column["name"]},
@@ -447,12 +443,16 @@ def _fire_webhook(url: str, card: dict, column: dict):
         "ts": datetime.now(timezone.utc).isoformat(),
     }
     data = json.dumps(payload, ensure_ascii=False).encode()
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    try:
-        urllib.request.urlopen(req, timeout=10)
-        print(f"[talaria] Webhook fired: {url}")
-    except Exception as e:
-        print(f"[talaria] Webhook failed ({url}): {e}")
+    headers = {"Content-Type": "application/json"}
+    headers.update(column.get("webhook_headers") or {})
+    req = urllib.request.Request(url, data=data, headers=headers)
+    def _send():
+        try:
+            urllib.request.urlopen(req, timeout=10)
+            print(f"[talaria] Webhook fired: {url}")
+        except Exception as e:
+            print(f"[talaria] Webhook failed ({url}): {e}")
+    threading.Thread(target=_send, daemon=True).start()
 
 
 def _create_github_issue(card: dict, column: dict, repo: str = None):
@@ -666,7 +666,7 @@ def update_column(col_id):
     if not col:
         return jsonify({"error": "Not found"}), 404
     body = request.json
-    for key in ("trigger", "webhook_url", "github_repo", "worker", "context_files", "instructions"):
+    for key in ("trigger", "webhook_url", "webhook_headers", "github_repo", "worker", "context_files", "instructions"):
         if key in body:
             if body[key] is None and key in col:
                 del col[key]

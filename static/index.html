@@ -145,6 +145,24 @@
       font-size: 11px;
     }
 
+    .col-settings-btn {
+      background: none;
+      border: none;
+      color: inherit;
+      opacity: 0.5;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+      transition: opacity 0.15s;
+    }
+    .col-settings-btn:hover { opacity: 1; }
+    .col-webhook-dot {
+      font-size: 10px;
+      opacity: 0.8;
+      vertical-align: middle;
+    }
+
     .col-cards {
       display: flex;
       flex-direction: column;
@@ -698,6 +716,120 @@
       .column { flex: 0 0 260px; }
       .board { padding: 12px; gap: 8px; }
     }
+
+    /* ── Architecture Viewer ── */
+    .arch-modal .modal {
+      width: 920px;
+      max-width: 96vw;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .arch-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .arch-tabs {
+      display: flex;
+      gap: 4px;
+    }
+
+    .arch-tab {
+      padding: 5px 14px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .arch-tab:hover { color: var(--text); background: var(--card); }
+    .arch-tab.active {
+      border-color: var(--border);
+      background: var(--card);
+      color: var(--text);
+    }
+
+    .arch-modal-body {
+      overflow-y: auto;
+      flex: 1;
+      padding: 20px;
+    }
+
+    .arch-docs-content {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+    .arch-docs-content h1, .arch-docs-content h2, .arch-docs-content h3,
+    .arch-docs-content h4, .arch-docs-content h5, .arch-docs-content h6 {
+      color: var(--text);
+      margin: 1.4em 0 0.5em;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .arch-docs-content h1 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+    .arch-docs-content h2 { font-size: 1.25em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+    .arch-docs-content h3 { font-size: 1.1em; }
+    .arch-docs-content p { margin: 0.7em 0; }
+    .arch-docs-content code {
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 0.85em;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.15em 0.4em;
+    }
+    .arch-docs-content pre {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 16px;
+      overflow-x: auto;
+      margin: 0.8em 0;
+    }
+    .arch-docs-content pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 12px;
+    }
+    .arch-docs-content ul, .arch-docs-content ol { padding-left: 1.6em; margin: 0.5em 0; }
+    .arch-docs-content li { margin: 0.25em 0; }
+    .arch-docs-content blockquote {
+      border-left: 3px solid var(--border);
+      margin: 0.8em 0;
+      padding: 0.2em 1em;
+      color: var(--text-muted);
+    }
+    .arch-docs-content hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+    .arch-docs-content strong { font-weight: 600; color: var(--text); }
+    .arch-docs-content em { font-style: italic; }
+    .arch-docs-content a { color: var(--accent); text-decoration: none; }
+    .arch-docs-content a:hover { text-decoration: underline; }
+
+    .arch-svg-box { cursor: default; transition: opacity 0.1s; }
+    .arch-svg-box:hover { opacity: 0.85; }
+
+    .arch-refresh-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .arch-refresh-btn:hover { color: var(--text); background: var(--card); }
   </style>
 </head>
 <body>
@@ -710,6 +842,7 @@
   </div>
   <div class="header-right">
     <span class="cost-badge" id="board-cost" title="Total cost across all cards">$0.00</span>
+    <button class="btn" onclick="openArchModal()">📐 Architecture</button>
     <button class="btn btn-primary" onclick="openCreateModal()">+ New Card</button>
   </div>
 </header>
@@ -835,6 +968,57 @@
   </div>
 </div>
 
+<!-- ── Architecture Modal ── -->
+<div class="modal-overlay arch-modal" id="archModal">
+  <div class="modal">
+    <div class="arch-modal-header">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span style="font-size:16px;font-weight:600;color:var(--text)">Architecture</span>
+        <div class="arch-tabs">
+          <button class="arch-tab active" id="arch-tab-diagram" onclick="switchArchTab('diagram')">Diagram</button>
+          <button class="arch-tab" id="arch-tab-docs" onclick="switchArchTab('docs')">Docs</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="arch-refresh-btn" onclick="refreshArch()" title="Reload diagram and docs">↻ Refresh</button>
+        <button class="close-btn" onclick="closeArchModal()">✕</button>
+      </div>
+    </div>
+    <div class="arch-modal-body">
+      <div id="arch-diagram-view">
+        <div id="arch-svg-container" style="min-height:200px;display:flex;align-items:center;justify-content:center">
+          <span style="color:var(--text-muted)">Loading diagram…</span>
+        </div>
+      </div>
+      <div id="arch-docs-view" style="display:none">
+        <div class="arch-docs-content" id="arch-docs-content"><span style="color:var(--text-muted)">Loading docs…</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Column Settings Modal ── -->
+<div class="modal-overlay" id="colSettingsModal">
+  <div class="modal">
+    <h2>Column Settings: <span id="col-settings-name" style="color:var(--accent)"></span></h2>
+    <div class="form-group">
+      <label>Webhook URL</label>
+      <input type="url" id="col-webhook-url" placeholder="https://hooks.slack.com/... or any POST endpoint" />
+    </div>
+    <div class="form-group">
+      <label>Webhook Headers (JSON)</label>
+      <textarea id="col-webhook-headers" placeholder='{"Authorization": "Bearer token", "X-Custom": "value"}'></textarea>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+      When a card moves into this column, Talaria will POST a <code style="background:var(--card);padding:1px 4px;border-radius:3px">card.moved</code> event to the URL above.
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeColumnSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveColumnSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Activity Log ── -->
 <button class="activity-btn" onclick="toggleActivity()">⚡</button>
 <div class="activity-panel" id="activityPanel"></div>
@@ -956,8 +1140,11 @@ function renderBoard() {
     colEl.innerHTML = `
       <div class="col-header" data-col="${col.id}" draggable="true"
            ondragstart="onColDragStart(event)" ondragend="onDragEnd(event)">
-        <span>${col.name}</span>
-        <span class="col-count">${colCount}</span>
+        <span>${col.name}${col.webhook_url ? ' <span class="col-webhook-dot" title="Webhook configured: ' + escapeHtml(col.webhook_url) + '">⚡</span>' : ''}</span>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span class="col-count">${colCount}</span>
+          <button class="col-settings-btn" onclick="event.stopPropagation();openColumnSettings('${col.id}')" title="Column settings">⚙</button>
+        </div>
       </div>
       <div class="col-cards" id="cards-${col.id}"
            ondragover="onDragOver(event)" ondragleave="onDragLeave(event)"
@@ -1303,11 +1490,262 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove("show"), 2000);
 }
 
+// ── Architecture Viewer ──
+let archTabActive = 'diagram';
+
+async function openArchModal() {
+  document.getElementById("archModal").classList.add("open");
+  // Always reload on open so diagram/docs stay fresh when files change
+  if (archTabActive === 'diagram') loadArchDiagram();
+  else loadArchDocs();
+}
+
+function closeArchModal() {
+  document.getElementById("archModal").classList.remove("open");
+}
+
+function refreshArch() {
+  if (archTabActive === 'diagram') loadArchDiagram();
+  else loadArchDocs();
+}
+
+function switchArchTab(tab) {
+  archTabActive = tab;
+  document.getElementById("arch-diagram-view").style.display = tab === 'diagram' ? '' : 'none';
+  document.getElementById("arch-docs-view").style.display = tab === 'docs' ? '' : 'none';
+  document.getElementById("arch-tab-diagram").classList.toggle("active", tab === 'diagram');
+  document.getElementById("arch-tab-docs").classList.toggle("active", tab === 'docs');
+  if (tab === 'diagram') loadArchDiagram();
+  else loadArchDocs();
+}
+
+async function loadArchDiagram() {
+  document.getElementById("arch-svg-container").innerHTML =
+    '<span style="color:var(--text-muted)">Loading diagram…</span>';
+  try {
+    const data = await fetch('/docs/architecture.excalidraw.json').then(r => r.json());
+    document.getElementById("arch-svg-container").innerHTML = renderExcalidrawSVG(data.elements || []);
+  } catch {
+    document.getElementById("arch-svg-container").innerHTML =
+      '<span style="color:var(--text-muted)">Failed to load diagram</span>';
+  }
+}
+
+async function loadArchDocs() {
+  document.getElementById("arch-docs-content").innerHTML =
+    '<span style="color:var(--text-muted)">Loading docs…</span>';
+  try {
+    const text = await fetch('/docs/architecture.md').then(r => r.text());
+    document.getElementById("arch-docs-content").innerHTML = markdownToHTML(text);
+  } catch {
+    document.getElementById("arch-docs-content").innerHTML =
+      '<span style="color:var(--text-muted)">Failed to load docs</span>';
+  }
+}
+
+// Lightweight markdown-to-HTML renderer
+function markdownToHTML(md) {
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const lines = md.split('\n');
+  const out = [];
+  let inCode = false, codeLang = '', codeBuf = [];
+  let inList = null; // 'ul' or 'ol'
+
+  function flushList() {
+    if (inList) { out.push(`</${inList}>`); inList = null; }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Fenced code block
+    if (/^```/.test(line)) {
+      if (!inCode) {
+        flushList();
+        inCode = true; codeLang = line.slice(3).trim(); codeBuf = [];
+      } else {
+        out.push(`<pre><code class="language-${esc(codeLang)}">${esc(codeBuf.join('\n'))}</code></pre>`);
+        inCode = false; codeBuf = [];
+      }
+      continue;
+    }
+    if (inCode) { codeBuf.push(line); continue; }
+
+    // HR
+    if (/^---+$/.test(line.trim())) { flushList(); out.push('<hr>'); continue; }
+
+    // Headings
+    const hm = line.match(/^(#{1,6})\s+(.*)/);
+    if (hm) {
+      flushList();
+      const lvl = hm[1].length;
+      out.push(`<h${lvl}>${inlineFormat(esc(hm[2]))}</h${lvl}>`);
+      continue;
+    }
+
+    // Unordered list
+    const ulm = line.match(/^[\-\*\+]\s+(.*)/);
+    if (ulm) {
+      if (inList !== 'ul') { flushList(); out.push('<ul>'); inList = 'ul'; }
+      out.push(`<li>${inlineFormat(esc(ulm[1]))}</li>`);
+      continue;
+    }
+
+    // Ordered list
+    const olm = line.match(/^\d+\.\s+(.*)/);
+    if (olm) {
+      if (inList !== 'ol') { flushList(); out.push('<ol>'); inList = 'ol'; }
+      out.push(`<li>${inlineFormat(esc(olm[1]))}</li>`);
+      continue;
+    }
+
+    // Blockquote
+    const bqm = line.match(/^>\s?(.*)/);
+    if (bqm) {
+      flushList();
+      out.push(`<blockquote>${inlineFormat(esc(bqm[1]))}</blockquote>`);
+      continue;
+    }
+
+    // Blank line
+    if (!line.trim()) { flushList(); out.push(''); continue; }
+
+    // Paragraph
+    flushList();
+    out.push(`<p>${inlineFormat(esc(line))}</p>`);
+  }
+  flushList();
+  if (inCode && codeBuf.length) {
+    out.push(`<pre><code>${esc(codeBuf.join('\n'))}</code></pre>`);
+  }
+  return out.join('\n');
+}
+
+function inlineFormat(s) {
+  // Bold + italic, bold, italic, inline code, links
+  return s
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+
+function renderExcalidrawSVG(elements) {
+  if (!elements.length) return '<span style="color:var(--text-muted)">No diagram elements</span>';
+
+  // Compute bounding box
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  elements.forEach(el => {
+    if (el.type === 'arrow') {
+      (el.points || [[0,0],[el.width||0,el.height||0]]).forEach(([px,py]) => {
+        minX = Math.min(minX, el.x+px); minY = Math.min(minY, el.y+py);
+        maxX = Math.max(maxX, el.x+px); maxY = Math.max(maxY, el.y+py);
+      });
+    } else {
+      minX = Math.min(minX, el.x);           minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x+(el.width||0)); maxY = Math.max(maxY, el.y+(el.height||0));
+    }
+  });
+
+  const pad = 28, vw = maxX - minX + pad*2, vh = maxY - minY + pad*2;
+  const ox = -minX + pad, oy = -minY + pad;
+  const x = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const parts = [];
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vw} ${vh}" style="width:100%;height:auto;display:block;background:#f8f9fa;border-radius:8px">`);
+  parts.push(`<style>.arch-svg-box { cursor:default; transition:opacity 0.12s; } .arch-svg-box:hover { opacity:0.82; }</style>`);
+  parts.push(`<defs><marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#555"/></marker></defs>`);
+
+  // Arrows first (under boxes)
+  elements.filter(el => el.type === 'arrow').forEach(el => {
+    const pts = el.points || [[0,0],[el.width||0,el.height||0]];
+    const pStr = pts.map(([px,py]) => `${el.x+px+ox},${el.y+py+oy}`).join(' ');
+    parts.push(`<polyline points="${pStr}" fill="none" stroke="${x(el.strokeColor||'#555')}" stroke-width="${el.strokeWidth||2}" marker-end="url(#ah)"/>`);
+    if (el.text) {
+      const mx = el.x + (pts[0][0]+pts[pts.length-1][0])/2 + ox;
+      const my = el.y + (pts[0][1]+pts[pts.length-1][1])/2 + oy - 7;
+      const tw = el.text.length * 6 + 12;
+      parts.push(`<rect x="${mx-tw/2}" y="${my-13}" width="${tw}" height="16" fill="#f8f9fa" rx="3"/>`);
+      parts.push(`<text x="${mx}" y="${my}" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="11" fill="#555">${x(el.text)}</text>`);
+    }
+  });
+
+  // Boxes on top with hover class
+  elements.filter(el => el.type === 'rectangle' || el.type === 'ellipse').forEach(el => {
+    const ex = el.x+ox, ey = el.y+oy, rx = el.borderRadius||0;
+    const tooltip = el.text ? ` title="${x(el.text.replace(/\\n/g,'\n'))}"` : '';
+    parts.push(`<g class="arch-svg-box"${tooltip}>`);
+    parts.push(`<rect x="${ex}" y="${ey}" width="${el.width}" height="${el.height}" rx="${rx}" ry="${rx}" fill="${x(el.backgroundColor||'#fff')}" stroke="${x(el.strokeColor||'#888')}" stroke-width="${el.strokeWidth||2}"/>`);
+    if (el.text) {
+      const lines = el.text.replace(/\\n/g, '\n').split('\n');
+      const fs = el.fontSize || 14, lh = fs * 1.35;
+      const totalH = lines.length * lh;
+      const cx = ex + el.width/2;
+      const startY = ey + el.height/2 - totalH/2 + fs*0.85;
+      lines.forEach((line, i) => {
+        parts.push(`<text x="${cx}" y="${startY + i*lh}" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="${fs}" fill="#1a1a1a">${x(line)}</text>`);
+      });
+    }
+    parts.push(`</g>`);
+  });
+
+  parts.push('</svg>');
+  return parts.join('\n');
+}
+
+// ── Column Settings ──
+let currentColSettingsId = null;
+
+function openColumnSettings(colId) {
+  currentColSettingsId = colId;
+  const col = board.columns.find(c => c.id === colId);
+  if (!col) return;
+  document.getElementById("col-settings-name").textContent = col.name;
+  document.getElementById("col-webhook-url").value = col.webhook_url || "";
+  document.getElementById("col-webhook-headers").value =
+    col.webhook_headers ? JSON.stringify(col.webhook_headers, null, 2) : "";
+  document.getElementById("colSettingsModal").classList.add("open");
+}
+
+function closeColumnSettings() {
+  document.getElementById("colSettingsModal").classList.remove("open");
+  currentColSettingsId = null;
+}
+
+async function saveColumnSettings() {
+  if (!currentColSettingsId) return;
+  const url = document.getElementById("col-webhook-url").value.trim();
+  const headersRaw = document.getElementById("col-webhook-headers").value.trim();
+  let headers = null;
+  if (headersRaw) {
+    try { headers = JSON.parse(headersRaw); }
+    catch { showToast("Invalid JSON in headers"); return; }
+  }
+  const col = board.columns.find(c => c.id === currentColSettingsId);
+  const body = { webhook_url: url || null, webhook_headers: headers };
+  // Manage trigger: set to "webhook" when url added to a null-trigger col; clear when url removed
+  if (url && !col.trigger) body.trigger = "webhook";
+  else if (!url && col.trigger === "webhook") body.trigger = null;
+  try {
+    const updated = await api("PATCH", `/column/${currentColSettingsId}`, body);
+    const idx = board.columns.findIndex(c => c.id === currentColSettingsId);
+    if (idx !== -1) board.columns[idx] = { ...board.columns[idx], ...updated };
+    closeColumnSettings();
+    showToast("Column settings saved");
+    renderBoard();
+  } catch (e) {
+    showToast("Failed: " + e.message);
+  }
+}
+
 // ── Keyboard shortcuts ──
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     closeCreateModal();
     closeDetailModal();
+    closeArchModal();
+    closeColumnSettings();
     document.getElementById("activityPanel").classList.remove("open");
   }
   if (e.key === "n" && !e.metaKey && !e.ctrlKey && document.activeElement.tagName === "BODY") {
