@@ -49,7 +49,7 @@
     {
       "id": "review",
       "name": "Review",
-      "trigger": "github_issue"
+      "trigger": null
     },
     {
       "id": "done",
