@@ -109,10 +109,12 @@ Long-running daemon. Polls the board and drives the autonomous pipeline.
    a. Log cost entry (agent, tokens, cost_usd)
    b. Add status note
    c. PATCH /api/card/:id {"column": next_column}
-6. Review column CI gate (if tests.command defined):
-   a. Run tests.command in card's worktree
-   b. exit 0 → advance to done
-   c. non-zero → move back to in_progress + add failure note
+6. Review column CI gate (triggered for every card in review):
+   a. Read card.tests.command (per-card field, not column config)
+   b. If no tests defined → auto-advance to done
+   c. Run tests.command in card's worktree
+   d. exit 0 → advance to done
+   e. non-zero → move back to in_progress + add failure note
 ```
 
 **Environment Variables:**
@@ -193,8 +195,7 @@ Source of truth for board structure. **Does not store cards** (cards live in `ca
     { "id": "in_progress", "name": "In Progress",    "trigger": "agent_spawn",
       "worker": "claude-code",
       "context_files": ["talaria.md", "coding-guide.md"] },
-    { "id": "review",      "name": "Review",         "trigger": null,
-      "tests": { "command": "pytest", "pass_if": "exit_0" } },
+    { "id": "review",      "name": "Review",         "trigger": null },
     { "id": "done",        "name": "Done",           "trigger": "notify" }
   ]
 }
@@ -210,8 +211,6 @@ Column fields:
 | `worker` | Worker type for `agent_spawn`: `claude-code`, `hermes`, `codex` |
 | `context_files` | Files to load from `TALARIA_HOME` into agent context |
 | `instructions` | Optional extra instructions injected into agent context |
-| `tests.command` | Shell command to run in Review CI gate |
-| `tests.pass_if` | Condition: `exit_0` |
 | `webhook_url` | URL for `webhook` trigger |
 | `github_repo` | Repo for `github_issue` trigger |
 
@@ -318,8 +317,9 @@ agent_watcher (worker exit detected):
     ├─ Add "Worker finished" status note
     └─ Advance card to next column
 
-Review CI gate (if tests.command defined):
-    ├─ Run command in worktree
+Review CI gate (agent_watcher polls review column each cycle):
+    ├─ Read card.tests (per-card field, not column config)
+    ├─ No tests defined → auto-advance to "done"
     ├─ exit 0  → PATCH column: "done" + notify
     └─ non-zero → PATCH column: "in_progress" + add failure note
 
@@ -442,8 +442,8 @@ ngrok http 8400
 | `os.waitpid(WNOHANG)` | Avoids zombie processes; handles both child and non-child PIDs |
 | Branch-per-card worktrees | Agents work in isolation; merges are clean and auditable |
 | Column-level trigger config | Board behavior driven by `board.json` — no code changes needed |
-| CI gate in Review | Automated quality check before Done, with auto-retry loop |
+| CI gate in Review | Per-card `tests.command` runs in worktree; auto-advances or retries |
 
 ---
 
-*Last regenerated: 2026-03-23. Update by moving the Architecture Diagram card to In Progress.*
+*Last regenerated: 2026-03-24. Update by moving the Architecture Diagram card to In Progress.*
