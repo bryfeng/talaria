@@ -77,7 +77,7 @@ SINGLE_CARD = {
     "description": "The alpha card description.",
     "assignee": "alice",
     "labels": ["priority:medium"],
-    "notes": [
+    "status_notes": [
         {"id": "n1", "text": "Working on it.", "author": "alice", "ts": "2026-03-24T00:00:00+00:00"}
     ],
     "cost_log": [
@@ -174,7 +174,7 @@ class TestCmdCreate:
         call_args = mock_req.call_args
         assert call_args[0][0] == "POST"
         assert call_args[0][1] == "/api/card"
-        assert call_args[1]["body"]["title"] == "Brand new card"
+        assert call_args[0][2]["title"] == "Brand new card"
 
     def test_create_prints_card_json(self, capsys):
         with patch("talaria.cli._request") as mock_req:
@@ -191,28 +191,28 @@ class TestCmdCreate:
             mock_req.return_value = {"id": "new1", "title": "High card"}
             cmd_create(["High card", "-p", "critical"])
 
-        assert mock_req.call_args[1]["body"]["priority"] == "critical"
+        assert mock_req.call_args[0][2]["priority"] == "critical"
 
     def test_create_with_column(self, capsys):
         with patch("talaria.cli._request") as mock_req:
             mock_req.return_value = {"id": "new2", "title": "Spec card"}
             cmd_create(["Spec card", "-c", "spec"])
 
-        assert mock_req.call_args[1]["body"]["column"] == "spec"
+        assert mock_req.call_args[0][2]["column"] == "spec"
 
     def test_create_with_labels(self, capsys):
         with patch("talaria.cli._request") as mock_req:
             mock_req.return_value = {"id": "new3", "title": "Labelled card"}
             cmd_create(["Labelled card", "-l", "bug,urgent"])
 
-        assert mock_req.call_args[1]["body"]["labels"] == ["bug", "urgent"]
+        assert mock_req.call_args[0][2]["labels"] == ["bug", "urgent"]
 
     def test_create_with_description(self, capsys):
         with patch("talaria.cli._request") as mock_req:
             mock_req.return_value = {"id": "new4", "title": "Described card"}
             cmd_create(["Described card", "-d", "This is the description."])
 
-        assert mock_req.call_args[1]["body"]["description"] == "This is the description."
+        assert mock_req.call_args[0][2]["description"] == "This is the description."
 
 
 # ── talaria move ─────────────────────────────────────────────────────────────
@@ -227,7 +227,7 @@ class TestCmdMove:
         call_args = mock_req.call_args
         assert call_args[0][0] == "PATCH"
         assert "aaaa1111" in call_args[0][1]
-        assert call_args[1]["body"]["column"] == "spec"
+        assert call_args[0][2]["column"] == "spec"
 
     def test_move_requires_two_args(self, capsys):
         with pytest.raises(SystemExit):
@@ -299,7 +299,7 @@ class TestCmdNote:
         call_args = mock_req.call_args
         assert call_args[0][0] == "POST"
         assert "aaaa1111" in call_args[0][1]
-        assert call_args[1]["body"]["text"] == "Hello note"
+        assert call_args[0][2]["text"] == "Hello note"
 
     def test_note_requires_card_id_and_text(self, capsys):
         with pytest.raises(SystemExit):
