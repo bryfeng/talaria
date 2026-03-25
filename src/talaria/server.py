@@ -10,6 +10,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -31,6 +32,7 @@ from talaria.triggers import (
     AGENT_QUEUE,
     AGENT_QUEUE_LOCK,
 )
+from talaria.guardrails import enforce_runner_target_separation
 
 app = Flask(__name__, static_folder=str(BASE_DIR / "static"))
 app.config["JSON_SORT_KEYS"] = False
@@ -279,6 +281,17 @@ def static_files(filename):
 
 def main():
     """Entry point for talaria-server CLI."""
+    runner_dir = BASE_DIR
+    target_paths = [
+        os.path.expanduser(repo.get("path", ""))
+        for repo in _get_repos()
+        if isinstance(repo, dict)
+    ]
+    enforce_runner_target_separation(
+        runner_dir=runner_dir,
+        target_paths=[Path(p) for p in target_paths if p],
+    )
+
     port = int(os.getenv("TALARIA_PORT", os.getenv("KANBAN_PORT", 8400)))
     print(f"🗂  Talaria running at http://localhost:{port}")
     app.run(host="0.0.0.0", port=port, debug=True, use_reloader=True)

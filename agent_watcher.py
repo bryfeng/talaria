@@ -48,6 +48,42 @@ MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "2"))
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "15"))
 AUTO_SUMMARY = os.getenv("AUTO_SUMMARY", "").lower() in ("1", "true", "yes")
 
+
+def _is_truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def enforce_runner_target_separation() -> None:
+    """Fail fast if watcher is configured to mutate its own checkout."""
+    if _is_truthy(os.getenv("TALARIA_BYPASS_ALLOWED")):
+        print("[guardrail] WARNING: TALARIA_BYPASS_ALLOWED=true — separation guard bypassed.")
+        return
+
+    runner_dir = Path(__file__).resolve().parent
+
+    target_paths = [Path(TALARIA_WORK_DIR).expanduser().resolve()]
+    for cfg in [runner_dir / "talaria.config.json", TALARIA_HOME / "talaria.config.json"]:
+        if not cfg.exists():
+            continue
+        try:
+            data = json.loads(cfg.read_text())
+            repos = data.get("repos", [])
+            if isinstance(repos, dict):
+                repos = [{"name": k, **v} for k, v in repos.items()]
+            for repo in repos:
+                if isinstance(repo, dict) and repo.get("path"):
+                    target_paths.append(Path(str(repo["path"])).expanduser().resolve())
+        except Exception:
+            continue
+
+    for target in target_paths:
+        if runner_dir == target:
+            raise SystemExit(
+                "[guardrail] runner/target path collision detected: "
+                f"{runner_dir}. Run watcher from stable clone and target a different dev repo, "
+                "or set TALARIA_BYPASS_ALLOWED=true for emergency-only bypass."
+            )
+
 # Agent binaries
 HERMES_BINARY = os.getenv("HERMES_AGENT_PATH",
     os.path.expanduser("~/.hermes/hermes-agent/run_agent.py"))
@@ -938,5 +974,6 @@ if __name__ == "__main__":
     parser.add_argument("--max-concurrent", type=int, default=MAX_CONCURRENT)
     args = parser.parse_args()
 
+    enforce_runner_target_separation()
     runner = PipelineRunner()
     runner.run(poll_interval=args.poll_interval, max_concurrent=args.max_concurrent)

@@ -107,6 +107,24 @@ Add or rename columns in `board.json`. Assign triggers to automate any workflow.
 
 Archived cards are moved to `cards/archive/` to keep Done focused on recent operational history.
 
+## Self-hosting guardrails (lean)
+
+Talaria enforces runner/target separation by default:
+- Run orchestrator from a stable clone (example: `~/talaria-stable`)
+- Target a different dev clone for mutations (example: `~/talaria-dev`)
+
+If runner path equals target path, `talaria-server` and `agent_watcher.py` fail fast.
+Emergency-only bypass: `TALARIA_BYPASS_ALLOWED=true`.
+
+Optional local enforcement for contributors:
+
+```bash
+bash scripts/install_hooks.sh
+```
+
+This installs a `commit-msg` hook requiring commit messages to include card IDs like `[card:7ce240ee]`.
+Explicit bypass tokens: `[no-card]` or `[ops]`.
+
 ---
 
 ## Features

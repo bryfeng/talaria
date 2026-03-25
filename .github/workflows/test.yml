@@ -12,5 +12,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -e ".[dev]"
+      - name: Commit message policy
+        run: python scripts/check_commit_message.py
       - run: pytest tests/ -v
       - run: ruff check .
