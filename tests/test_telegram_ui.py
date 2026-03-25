@@ -11,9 +11,7 @@ Tests the pure logic functions that don't require network access:
   handle_callback()    — inline button dispatch
 """
 
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import patch
 
 import talaria.telegram_ui as ui
 
@@ -155,7 +153,7 @@ class TestHandleMessage:
             mock_send.assert_called_once()
 
     def test_next_no_cards(self):
-        with patch.object(ui, "api", return_value={"cards": [], "columns": []}) as mock_api, \
+        with patch.object(ui, "api", return_value={"cards": [], "columns": []}), \
              patch.object(ui, "tg_send") as mock_send:
             ui.handle_message(self._msg("/next"))
             mock_send.assert_called_once()
@@ -189,7 +187,7 @@ class TestHandleMessage:
         ui._note_state[chat_id] = card_id
 
         with patch.object(ui, "api") as mock_api, \
-             patch.object(ui, "tg_send") as mock_send:
+             patch.object(ui, "tg_send"):
             ui.handle_message(self._msg("Great progress!", chat_id=chat_id))
             mock_api.assert_called_once_with(
                 "POST", f"/api/card/{card_id}/note",
@@ -201,7 +199,7 @@ class TestHandleMessage:
         """A slash command while in note-waiting state is routed normally."""
         chat_id = "88"
         ui._note_state[chat_id] = "anycard"
-        with patch.object(ui, "api", return_value={"cards": [], "columns": []}) as mock_api, \
+        with patch.object(ui, "api", return_value={"cards": [], "columns": []}), \
              patch.object(ui, "tg_send"):
             ui.handle_message(self._msg("/board", chat_id=chat_id))
         # note state should still be there (command didn't consume it)

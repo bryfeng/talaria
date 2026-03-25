@@ -7,6 +7,8 @@ Handles all reading/writing of cards/*.md files and board.json.
 import json
 import os
 import re
+import shutil
+
 import yaml
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,10 +22,12 @@ def _project_root() -> Path:
 
 BASE_DIR = _project_root()
 CARDS_DIR = BASE_DIR / "cards"
+ARCHIVE_DIR = CARDS_DIR / "archive"
 BOARD_FILE = BASE_DIR / "board.json"
 CONFIG_FILE = BASE_DIR / "talaria.config.json"
 TALARIA_HOME = Path(os.getenv("TALARIA_HOME", os.path.expanduser("~/.talaria/talaria")))
 LOG_FILE = BASE_DIR / "logs" / "talaria.log"
+DONE_CAP = 20
 
 
 # ── config I/O ─────────────────────────────────────────────────────────────────
@@ -215,6 +219,43 @@ def _full_board() -> dict:
     board = _load_board()
     board["cards"] = [_slim_card(c) for c in _all_cards()]
     return board
+
+
+def _archive_excess_done_cards(done_cap: int = DONE_CAP) -> list[str]:
+    """Archive oldest Done cards to keep Done as a rolling operational window.
+
+    Archive is file-based (cards/archive/*.md) to stay lightweight.
+    Returns a list of archived card IDs.
+    """
+    done_cards = [c for c in _all_cards() if c.get("column") == "done"]
+    overflow = len(done_cards) - done_cap
+    if overflow <= 0:
+        return []
+
+    done_cards.sort(key=lambda c: (c.get("updated_at") or c.get("created_at") or ""))
+    to_archive = done_cards[:overflow]
+
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    archived_ids: list[str] = []
+
+    for card in to_archive:
+        card_id = card.get("id")
+        if not card_id:
+            continue
+        src = _card_path(card_id)
+        if not src.exists():
+            continue
+
+        dst = ARCHIVE_DIR / src.name
+        if dst.exists():
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+            dst = ARCHIVE_DIR / f"{card_id}-{stamp}.md"
+
+        shutil.move(str(src), str(dst))
+        _log("archived", card, from_col="done", to_col="archive")
+        archived_ids.append(card_id)
+
+    return archived_ids
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

@@ -6,10 +6,12 @@ Talaria — Lightweight kanban for agentic team coordination.
 __version__ = "0.1.0"
 
 import json
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from flask import Flask, send_from_directory, jsonify, request
+
+from flask import Flask, jsonify, request, send_from_directory
 
 from talaria.board import (
     BASE_DIR,
@@ -22,6 +24,7 @@ from talaria.board import (
     _full_board,
     _get_repos,
     _log,
+    _archive_excess_done_cards,
 )
 from talaria.triggers import (
     _trigger_action,
@@ -31,6 +34,7 @@ from talaria.triggers import (
 
 app = Flask(__name__, static_folder=str(BASE_DIR / "static"))
 app.config["JSON_SORT_KEYS"] = False
+logger = logging.getLogger(__name__)
 
 
 # ── API ─────────────────────────────────────────────────────────────────────────
@@ -102,21 +106,28 @@ def update_card(card_id):
         if key in body:
             card[key] = body[key]
 
+    moved_to = None
+
     # Column change → trigger logic
     if "column" in body and body["column"] != old_col:
-        card["column"] = body["column"]
-        col = next((c for c in board["columns"] if c["id"] == body["column"]), None)
-        _log("moved", card, from_col=old_col, to_col=body["column"])
+        moved_to = body["column"]
+        card["column"] = moved_to
+        col = next((c for c in board["columns"] if c["id"] == moved_to), None)
+        _log("moved", card, from_col=old_col, to_col=moved_to)
         if col:
             try:
                 _trigger_action(col, card, board)
             except Exception as e:
-                print(f"[talaria] Trigger action failed for {card_id}: {e}")
+                logger.exception("Trigger action failed for %s: %s", card_id, e)
     else:
         _log("updated", card)
 
     card["updated_at"] = datetime.now(timezone.utc).isoformat()
     _save_card(card)
+
+    if moved_to == "done":
+        _archive_excess_done_cards()
+
     return jsonify(card)
 
 

@@ -3,9 +3,11 @@ Migration: Split kanban.json cards into individual cards/{id}.md files.
 Reads kanban.json, writes one .md per card, then rewrites board.json.
 """
 import json
-import yaml
-from pathlib import Path
+import shutil
 from datetime import datetime
+from pathlib import Path
+
+import yaml
 
 SRC = Path("/Users/bryanfeng/talaria/kanban.json")
 CARDS_DIR = Path("/Users/bryanfeng/talaria/cards")
@@ -86,7 +88,6 @@ print(f"\nWrote {OUT_BOARD.name}")
 
 # ── Backup original kanban.json ────────────────────────────────────────────────
 backup = SRC.with_suffix(".json.bak")
-import shutil
 shutil.copy2(SRC, backup)
 print(f"Backed up original → {backup.name}")
 

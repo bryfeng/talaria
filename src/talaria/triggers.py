@@ -16,20 +16,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple
 
+from talaria.board import (
+    _repo_dir,
+    _log,
+    _slugify,
+)
+
 if TYPE_CHECKING:
     pass
 
 # Agent queue (shared with server.py API routes)
 AGENT_QUEUE = Path(__file__).parent.parent.parent / "agent_queue.json"
 AGENT_QUEUE_LOCK = threading.Lock()
-
-# ── Import from board.py ───────────────────────────────────────────────────────
-
-from talaria.board import (
-    _repo_dir,
-    _log,
-    _slugify,
-)
 
 
 # ── Worktree management ───────────────────────────────────────────────────────

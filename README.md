@@ -101,9 +101,11 @@ server.py (Flask :8400) ──reads/writes──▶ cards/*.md   ← one file pe
 | Ready | — | Ready to pick up |
 | In Progress | `agent_spawn` | Dispatches an implementation agent |
 | Review | — | Human review gate + CI run (`tests.command`) |
-| Done | `notify` | Telegram notification |
+| Done | `notify` | Telegram notification + rolling cap of 20 (oldest auto-archived) |
 
 Add or rename columns in `board.json`. Assign triggers to automate any workflow.
+
+Archived cards are moved to `cards/archive/` to keep Done focused on recent operational history.
 
 ---
 

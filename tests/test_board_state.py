@@ -1,7 +1,6 @@
 """Tests for talaria.board file I/O using current clean interfaces."""
 
 import json
-from pathlib import Path
 
 import pytest
 

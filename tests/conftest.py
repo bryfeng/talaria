@@ -50,6 +50,7 @@ def tmp_talaria_dir(monkeypatch):
         logs_dir = tmp / "logs"
         log_file = logs_dir / "talaria.log"
         agent_queue = tmp / "agent_queue.json"
+        archive_dir = cards_dir / "archive"
 
         cards_dir.mkdir()
         logs_dir.mkdir()
@@ -58,6 +59,7 @@ def tmp_talaria_dir(monkeypatch):
         # Patch board module paths (source of truth for file I/O helpers)
         monkeypatch.setattr(talaria_board, "BASE_DIR", tmp)
         monkeypatch.setattr(talaria_board, "CARDS_DIR", cards_dir)
+        monkeypatch.setattr(talaria_board, "ARCHIVE_DIR", archive_dir)
         monkeypatch.setattr(talaria_board, "BOARD_FILE", board_file)
         monkeypatch.setattr(talaria_board, "LOG_FILE", log_file)
 
@@ -71,6 +73,7 @@ def tmp_talaria_dir(monkeypatch):
         yield {
             "root": tmp,
             "cards_dir": cards_dir,
+            "archive_dir": archive_dir,
             "board_file": board_file,
             "logs_dir": logs_dir,
             "log_file": log_file,

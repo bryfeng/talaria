@@ -28,7 +28,6 @@ Lock / health files (in TALARIA_HOME):
 import json
 import os
 import re
-import select
 import signal
 import socket
 import subprocess

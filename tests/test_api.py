@@ -264,6 +264,24 @@ class TestColumnTriggers:
         assert rv.status_code == 200
         assert rv.get_json()["column"] == "done"
 
+    def test_done_column_archives_oldest_when_over_cap(self, app_client, tmp_talaria_dir):
+        created_ids = []
+        for i in range(21):
+            create = app_client.post("/api/card", json={"title": f"Done {i:02d}"})
+            card_id = create.get_json()["id"]
+            created_ids.append(card_id)
+            rv = app_client.patch(f"/api/card/{card_id}", json={"column": "done"})
+            assert rv.status_code == 200
+
+        board = app_client.get("/api/board").get_json()
+        done_cards = [c for c in board.get("cards", []) if c.get("column") == "done"]
+        assert len(done_cards) == 20
+
+        archived = list(tmp_talaria_dir["archive_dir"].glob("*.md"))
+        assert len(archived) == 1
+        # First completed card should be archived first.
+        assert archived[0].stem.startswith(created_ids[0])
+
     def test_agent_spawn_trigger_column_accepts_card(self, app_client):
         """Cards can be moved to agent_spawn trigger columns (spec, groom)."""
         create = app_client.post("/api/card", json={"title": "Spawn test"})

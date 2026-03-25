@@ -16,7 +16,7 @@ Covers:
 import subprocess
 import time
 from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -304,8 +304,7 @@ def test_worker_max_retries_env_default():
 
 def test_worker_inherits_module_timeout():
     """Worker.timeout_sec should pick up the module-level WORKER_TIMEOUT_SEC."""
-    w = _make_worker()
-    # We set it explicitly in _make_worker, but a freshly-constructed Worker uses the module default.
+    # A freshly-constructed Worker uses the module defaults.
     col_config = {"id": "in_progress", "name": "In Progress", "worker": "claude-code"}
     card = {"id": "x", "title": "t", "column": "in_progress"}
     fresh = Worker("x", col_config, card, "")
