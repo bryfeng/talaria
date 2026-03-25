@@ -10,11 +10,8 @@ Tests the low-level I/O operations:
 """
 
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 
 # ── Module under test ─────────────────────────────────────────────────────────

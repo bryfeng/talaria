@@ -14,10 +14,10 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Tuple
 
 if TYPE_CHECKING:
-    from flask import Flask
+    pass
 
 # Agent queue (shared with server.py API routes)
 AGENT_QUEUE = Path(__file__).parent.parent.parent / "agent_queue.json"
@@ -26,15 +26,9 @@ AGENT_QUEUE_LOCK = threading.Lock()
 # ── Import from board.py ───────────────────────────────────────────────────────
 
 from talaria.board import (
-    _load_card,
-    _save_card,
-    _load_board,
-    _save_board,
     _repo_dir,
     _log,
-    _append_log,
     _slugify,
-    LOG_FILE,
 )
 
 
@@ -218,7 +212,7 @@ def _get_diff_stat(repo_path: Path, branch_name: str) -> str:
 def _close_github_issue(repo: str, issue_number: str) -> bool:
     """Close a GitHub issue via gh CLI. Returns True on success."""
     try:
-        comment = f"Closed via Talaria — delivered in commit."
+        comment = "Closed via Talaria — delivered in commit."
         cmd = ["gh", "issue", "close", issue_number, "--repo", repo,
                "--comment", comment, "--reason", "completed"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -259,7 +253,7 @@ def _create_github_issue(card: dict, column: dict, repo: str = None) -> None:
         "title": title,
         "body": "\n".join(body_lines),
     }
-    labels = [l for l in card.get("labels", []) if not l.startswith("priority:")]
+    labels = [label_ for label_ in card.get("labels", []) if not label_.startswith("priority:")]
     if labels:
         payload["labels"] = labels
 

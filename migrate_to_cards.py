@@ -2,7 +2,8 @@
 Migration: Split kanban.json cards into individual cards/{id}.md files.
 Reads kanban.json, writes one .md per card, then rewrites board.json.
 """
-import json, os, yaml
+import json
+import yaml
 from pathlib import Path
 from datetime import datetime
 

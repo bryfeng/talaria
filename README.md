@@ -124,6 +124,53 @@ The frontend polls every 10 seconds. Active agents show a pulsing indicator. Cos
 ### Telegram integration
 Bot commands for full board operation from Telegram. Move cards, check status, get notified when work is done.
 
+Fresh install options:
+
+1) Standalone Talaria Telegram UI (quickest)
+
+```bash
+# In your Talaria environment
+export TELEGRAM_BOT_TOKEN=<your-bot-token>
+export TALARIA_BASE_URL=http://localhost:8400
+# Optional: lock the bot to specific chat IDs
+export TALARIA_TELEGRAM_ALLOWED_CHATS=<chat_id_1>,<chat_id_2>
+
+# Start Talaria server
+talaria-server
+
+# In another terminal, run Telegram UI worker
+talaria-telegram-ui
+```
+
+Commands:
+- /board
+- /next
+- /card <id>
+- /create <title>
+- /note <id> <text>
+
+Inline actions:
+- Move: Spec, Groom, Ready, In Progress, Review
+- ✅ Done
+- 📝 Note (next message becomes note text)
+- 🔄 Refresh
+
+2) Hermes gateway + Talaria API (recommended for Hermes users)
+
+If you're running Hermes Telegram gateway, enable Talaria routing in Hermes and point it at Talaria:
+
+```bash
+export TALARIA_BASE_URL=http://localhost:8400
+export TALARIA_TELEGRAM_UI_ENABLED=true
+# Optional allowlist (recommended for OSS deployments)
+export TALARIA_TELEGRAM_ALLOWED_CHATS=<chat_id_1>,<chat_id_2>
+```
+
+Behavior in Hermes Telegram:
+- /board, /next, /card, /create, /note are routed API-first to Talaria
+- talaria:* inline callbacks are handled natively
+- If Talaria is offline, users get an explicit error (no silent local-file fallback)
+
 ### CLI
 Terminal-first interface for scripting and agent workflows:
 
@@ -181,6 +228,9 @@ curl -X POST http://localhost:8400/api/card \
 | `HERMES_VENV_PATH` | `~/.hermes/hermes-agent/.venv/bin/python` | Python interpreter |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token |
 | `TELEGRAM_HOME_CHANNEL_ID` | — | Telegram chat ID |
+| `TALARIA_BASE_URL` | `http://localhost:8400` | API base URL used by Telegram UI/Hermes integration |
+| `TALARIA_TELEGRAM_ALLOWED_CHATS` | — | Comma-separated Telegram chat ID allowlist |
+| `TALARIA_TELEGRAM_UI_ENABLED` | `false` | Enable Talaria slash/callback routing inside Hermes gateway |
 
 ---
 

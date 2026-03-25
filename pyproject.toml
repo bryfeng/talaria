@@ -20,6 +20,7 @@ dev = ["pytest>=8.0", "ruff>=0.2"]
 [project.scripts]
 talaria = "talaria.cli:main"
 talaria-server = "talaria.server:main"
+talaria-telegram-ui = "talaria.telegram_ui:main"
 
 [build-system]
 requires = ["hatchling"]

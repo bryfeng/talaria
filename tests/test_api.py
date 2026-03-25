@@ -13,9 +13,7 @@ Tests the server.py Flask app endpoints:
   PATCH /api/column/<id>
 """
 
-import json
 
-import pytest
 
 
 # ── /api/board ────────────────────────────────────────────────────────────────

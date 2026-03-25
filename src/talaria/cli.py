@@ -120,7 +120,7 @@ def cmd_create(args):
     parser.add_argument("-r", "--repo", default="", help="GitHub repo (owner/repo)")
     parsed = parser.parse_args(args)
 
-    labels = [l.strip() for l in parsed.labels.split(",") if l.strip()]
+    labels = [label.strip() for label in parsed.labels.split(",") if label.strip()]
     payload = {
         "title": parsed.title,
         "priority": parsed.priority,

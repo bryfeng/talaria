@@ -15,15 +15,26 @@ Environment:
     TALARIA_WORK_DIR  — Repo working directory (default: ~/talaria)
     MAX_CONCURRENT    — Max simultaneous agents (default: 2)
     POLL_INTERVAL     — Seconds between board polls (default: 15)
+
+Lock / health files (in TALARIA_HOME):
+    .watcher.lock   — Contains the PID of the running watcher.  A second instance
+                      checks this file on startup and exits with a warning if the
+                      recorded PID is still alive.  Stale locks (dead PID) are
+                      silently cleaned up and a fresh lock is written.
+    .watcher.status — JSON health file updated on startup and removed on clean
+                      shutdown.  Fields: pid, started_at, host.
 """
 
 import json
 import os
-import sys
-import time
+import re
+import select
 import signal
+import socket
 import subprocess
 import tempfile
+import threading
+import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +56,84 @@ HERMES_PYTHON = os.getenv("HERMES_VENV_PATH",
     os.path.expanduser("~/.hermes/hermes-agent/venv/bin/python"))
 CLAUDE_CODE_BINARY = os.getenv("CLAUDE_CODE_BINARY", "claude")
 CODEX_BINARY = os.getenv("CODEX_BINARY", "codex")
+
+# Agent config
+AGENT_TIMEOUT = int(os.getenv("AGENT_TIMEOUT", "1800"))  # 30 min default (legacy)
+WORKER_TIMEOUT_SEC = int(os.getenv("WORKER_TIMEOUT_SEC", str(AGENT_TIMEOUT)))
+WORKER_NO_OUTPUT_SEC = int(os.getenv("WORKER_NO_OUTPUT_SEC", "300"))  # 5 min silent = hung
+WORKER_MAX_RETRIES = int(os.getenv("WORKER_MAX_RETRIES", "2"))
+
+# Prompt patterns that need auto-confirmation (y\n)
+_PROMPT_PATTERNS = [
+    re.compile(r'\[y/n\]\s*$', re.IGNORECASE),
+    re.compile(r'\?\[y/n\]\s*$', re.IGNORECASE),
+    re.compile(r'continue\?.*\[y/n\]', re.IGNORECASE),
+    re.compile(r'do you want to proceed', re.IGNORECASE),
+    re.compile(r'are you sure.*\(yes/no\)', re.IGNORECASE),
+    re.compile(r'allow.*\?$', re.IGNORECASE),
+]
+
+
+# ── Single-instance lock ──────────────────────────────────────────────────────
+
+_LOCK_FILE = TALARIA_HOME / ".watcher.lock"
+_STATUS_FILE = TALARIA_HOME / ".watcher.status"
+
+
+def _pid_alive(pid: int) -> bool:
+    """Return True if *pid* is a running process."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists but owned by another user
+
+
+def acquire_watcher_lock() -> None:
+    """Acquire the single-instance lock or exit with a warning.
+
+    Reads .watcher.lock; if the recorded PID is still alive the process
+    exits immediately.  Stale locks (dead PID) are cleaned up automatically.
+    """
+    if _LOCK_FILE.exists():
+        try:
+            existing_pid = int(_LOCK_FILE.read_text().strip())
+        except (ValueError, OSError):
+            existing_pid = None
+
+        if existing_pid and _pid_alive(existing_pid):
+            print(
+                f"[runner] ERROR: Another watcher is already running (PID {existing_pid}).\n"
+                f"[runner] Lock file: {_LOCK_FILE}\n"
+                f"[runner] To stop it: kill {existing_pid}\n"
+                f"[runner] To force-start: delete {_LOCK_FILE} and retry."
+            )
+            raise SystemExit(1)
+
+        # Stale lock — clean up silently
+        print(f"[runner] Stale lock found (PID {existing_pid} is gone). Removing.")
+        _LOCK_FILE.unlink(missing_ok=True)
+        _STATUS_FILE.unlink(missing_ok=True)
+
+    _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _LOCK_FILE.write_text(str(os.getpid()))
+
+
+def write_status_file() -> None:
+    """Write health/status JSON for external monitoring tools."""
+    _STATUS_FILE.write_text(json.dumps({
+        "pid": os.getpid(),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "host": socket.gethostname(),
+    }))
+
+
+def release_watcher_lock() -> None:
+    """Remove lock and status files on clean shutdown."""
+    _LOCK_FILE.unlink(missing_ok=True)
+    _STATUS_FILE.unlink(missing_ok=True)
 
 
 # ── API helpers ───────────────────────────────────────────────────────────────
@@ -104,7 +193,7 @@ def api_note(card_id: str, text: str, author: str = "runner") -> bool:
     try:
         url = f"http://localhost:{TALARIA_PORT}/api/card/{card_id}/note"
         body = json.dumps({"text": text, "author": author}).encode()
-        req = urllib.request.urlopen(
+        urllib.request.urlopen(
             urllib.request.Request(url, data=body,
                 headers={"Content-Type": "application/json"},
                 method="POST"),
@@ -225,7 +314,7 @@ def draft_context(col_config: dict, card: dict, home: Path) -> str:
     context_files, then appends the card spec at the end.
     """
     lines = []
-    lines.append(f"# Talaria — Worker Context")
+    lines.append("# Talaria — Worker Context")
     lines.append(f"# Card: {card['title']} [#{card['id']}]")
     lines.append(f"# Column: {col_config['id']} ({col_config['name']})")
     lines.append(f"# Worker: {col_config.get('worker', 'hermes')}")
@@ -281,7 +370,7 @@ def draft_context(col_config: dict, card: dict, home: Path) -> str:
     # Instructions from column config
     if col_config.get("instructions"):
         lines.append("")
-        lines.append(f"## Instructions")
+        lines.append("## Instructions")
         lines.append(col_config["instructions"])
 
     return "\n".join(lines)
@@ -298,6 +387,14 @@ class Worker:
         self.pid: Optional[int] = None
         self.started_at: Optional[str] = None
         self.process: Optional[subprocess.Popen] = None
+        self._popen: Optional[subprocess.Popen] = None  # actual Popen for newly spawned workers
+        self._log_file = None
+        self._output_thread: Optional[threading.Thread] = None
+        self._stop_output = threading.Event()
+        self._timed_out = False
+        self.last_output_at: float = 0.0
+        self.timeout_sec: int = WORKER_TIMEOUT_SEC
+        self.no_output_sec: int = WORKER_NO_OUTPUT_SEC
         # Use the card's worktree path (set when entering In Progress) so agents
         # run inside the correct repo's worktree for multi-repo cards.
         worktree = card.get("worktree_path")
@@ -314,29 +411,29 @@ class Worker:
             f.write(self.context)
         return Path(path)
 
-    def _spawn_hermes(self, ctx_path: Path, goal: str) -> int:
+    def _spawn_hermes(self, ctx_path: Path, goal: str) -> subprocess.Popen:
         cmd = [
             HERMES_PYTHON, HERMES_BINARY,
             "--query", goal,
             "--model", os.getenv("LLM_MODEL", "MiniMax-M2.7"),
             "--base-url", os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
         ]
-        proc = subprocess.Popen(cmd, cwd=self.work_dir, env=self._env())
-        return proc.pid
+        return subprocess.Popen(cmd, cwd=self.work_dir, env=self._env(),
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
     def _env(self) -> dict:
         """Get env dict for subprocess. Inherits parent environment as-is."""
         return os.environ.copy()
 
-    def _spawn_claude_code(self, ctx_path: Path, goal: str) -> int:
+    def _spawn_claude_code(self, ctx_path: Path, goal: str) -> subprocess.Popen:
         cmd = [CLAUDE_CODE_BINARY, "--dangerously-skip-permissions", "--print", goal]
-        proc = subprocess.Popen(cmd, cwd=self.work_dir, env=self._env())
-        return proc.pid
+        return subprocess.Popen(cmd, cwd=self.work_dir, env=self._env(),
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
-    def _spawn_codex(self, ctx_path: Path, goal: str) -> int:
+    def _spawn_codex(self, ctx_path: Path, goal: str) -> subprocess.Popen:
         cmd = [CODEX_BINARY, goal]
-        proc = subprocess.Popen(cmd, cwd=self.work_dir, env=self._env())
-        return proc.pid
+        return subprocess.Popen(cmd, cwd=self.work_dir, env=self._env(),
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
     def spawn(self) -> bool:
         """Spawn the worker process. Returns True if successful."""
@@ -360,13 +457,16 @@ class Worker:
 
         try:
             if self.worker_type == "claude-code":
-                self.pid = self._spawn_claude_code(ctx_path, goal)
+                self._popen = self._spawn_claude_code(ctx_path, goal)
             elif self.worker_type == "codex":
-                self.pid = self._spawn_codex(ctx_path, goal)
+                self._popen = self._spawn_codex(ctx_path, goal)
             else:
-                self.pid = self._spawn_hermes(ctx_path, goal)
+                self._popen = self._spawn_hermes(ctx_path, goal)
 
+            self.pid = self._popen.pid
             self.process = _ProcessWrapper(self.pid)
+            self.last_output_at = time.time()
+            self._start_output_thread()
             print(f"[runner] Spawned {self.worker_type} for card {self.card_id}, PID {self.pid}")
             return True
         except FileNotFoundError:
@@ -376,17 +476,73 @@ class Worker:
             print(f"[runner] Failed to spawn {self.worker_type}: {e}")
             return False
 
+    def _start_output_thread(self):
+        """Start a background thread that reads subprocess stdout and updates last_output_at."""
+        def reader():
+            try:
+                if self._popen and self._popen.stdout:
+                    for line in self._popen.stdout:
+                        if self._stop_output.is_set():
+                            break
+                        self.last_output_at = time.time()
+                        print(f"[{self.worker_type}/{self.card_id}] {line.rstrip()}")
+            except Exception:
+                pass
+        self._output_thread = threading.Thread(target=reader, daemon=True, name=f"output-{self.card_id}")
+        self._output_thread.start()
+
+    def check_timeout(self) -> tuple:
+        """Return (is_timed_out: bool, reason: str). Checks both overall timeout and no-output hang."""
+        if self.is_done():
+            return False, ""
+        now = time.time()
+        if self.started_at:
+            try:
+                started_ts = datetime.fromisoformat(self.started_at).timestamp()
+                elapsed = now - started_ts
+                if elapsed > self.timeout_sec:
+                    return True, f"overall timeout exceeded ({int(elapsed)}s > {self.timeout_sec}s)"
+            except Exception:
+                pass
+        if self._popen and self.last_output_at > 0 and self.no_output_sec > 0:
+            silent_for = now - self.last_output_at
+            if silent_for > self.no_output_sec:
+                return True, f"no output for {int(silent_for)}s (hung, threshold={self.no_output_sec}s)"
+        return False, ""
+
+    def kill(self):
+        """Terminate the worker process (SIGTERM then SIGKILL)."""
+        self._stop_output.set()
+        if self._popen:
+            try:
+                self._popen.terminate()
+            except Exception:
+                pass
+            try:
+                self._popen.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    self._popen.kill()
+                except Exception:
+                    pass
+        elif self.process:
+            self.process.kill()
+
     def is_done(self) -> bool:
         """Check if the worker process has exited."""
+        if self._popen is not None:
+            return self._popen.poll() is not None
         if self.process is None:
             return True
         return self.process.poll() is not None
 
     def cleanup(self):
         """Called when the worker is done. Logs completion."""
-        if self.process is None:
+        self._stop_output.set()
+        rc_source = self._popen if self._popen is not None else self.process
+        if rc_source is None:
             return
-        returncode = self.process.poll()
+        returncode = rc_source.poll()
         elapsed = 0
         if self.started_at:
             try:
@@ -528,7 +684,46 @@ def _get_next_column(current_col: str) -> Optional[str]:
 class PipelineRunner:
     def __init__(self):
         self.active_workers: dict[str, Worker] = {}  # card_id → Worker
+        self.retry_counts: dict[str, int] = {}  # card_id → retry count
         self.last_poll = 0
+
+    def _handle_timeout(self, worker: Worker, reason: str):
+        """Kill a timed-out/hung worker, log the failure, and retry or escalate."""
+        card_id = worker.card_id
+        worker.kill()
+        worker.cleanup()
+
+        retry_count = self.retry_counts.get(card_id, 0) + 1
+        self.retry_counts[card_id] = retry_count
+
+        failure_note = (
+            f"[runner] Worker {worker.worker_type} KILLED — {reason}. "
+            f"Attempt {retry_count}/{WORKER_MAX_RETRIES}."
+        )
+        api_note(card_id, failure_note, author="runner")
+        print(f"[runner] {failure_note}")
+
+        if retry_count >= WORKER_MAX_RETRIES:
+            escalate_note = (
+                f"[runner] Max retries ({WORKER_MAX_RETRIES}) exceeded. "
+                f"Escalating card to 'blocked'. Last failure: {reason}"
+            )
+            moved = api_patch(card_id, {"column": "blocked"})
+            if not moved:
+                # 'blocked' column may not exist; fall back to 'ready' with a strong note
+                api_patch(card_id, {"column": "ready"})
+                escalate_note += " (could not find 'blocked' column — returned to 'ready')"
+            api_note(card_id, escalate_note, author="runner")
+            notify(f"🚨 Card #{card_id} ESCALATED after {retry_count} failed attempts: {reason}")
+            del self.retry_counts[card_id]
+        else:
+            api_patch(card_id, {"column": "ready"})
+            retry_note = (
+                f"[runner] Card moved back to 'ready' for retry "
+                f"{retry_count}/{WORKER_MAX_RETRIES}. Failure: {reason}"
+            )
+            api_note(card_id, retry_note, author="runner")
+            notify(f"⚠️ Card #{card_id} timed out ({reason}) — retry {retry_count}/{WORKER_MAX_RETRIES}")
 
     def _dispatch_card(self, card: dict, col_config: dict):
         """Dispatch a worker for a card in a trigger column."""
@@ -573,10 +768,15 @@ class PipelineRunner:
         notify(f"🤖 *{worker.worker_type}* dispatched: *{card['title']}*\nCard: #{card_id}")
 
     def _check_workers(self):
-        """Poll active workers, handle completions."""
+        """Poll active workers, handle completions and timeouts."""
         done = []
         for card_id, worker in self.active_workers.items():
-            if worker.is_done():
+            timed_out, reason = worker.check_timeout()
+            if timed_out:
+                print(f"[runner] Worker for {card_id} timed out: {reason}")
+                self._handle_timeout(worker, reason)
+                done.append(card_id)
+            elif worker.is_done():
                 handle_worker_done(worker)
                 done.append(card_id)
 
@@ -640,7 +840,7 @@ class PipelineRunner:
             )
             exit_code = result.returncode
         except subprocess.TimeoutExpired:
-            api_note(card_id, f"[review-gate] TIMEOUT — test command exceeded 300s.", author="runner")
+            api_note(card_id, "[review-gate] TIMEOUT — test command exceeded 300s.", author="runner")
             api_patch(card_id, {"column": "in_progress"})
             notify(f"❌ Card #{card_id} review timed out (300s) — back to In Progress.")
             return
@@ -665,10 +865,15 @@ class PipelineRunner:
             notify(f"❌ Card #{card_id} tests failed — back to In Progress. Output:\n{summary[:500]}")
 
     def run(self, poll_interval: int = POLL_INTERVAL, max_concurrent: int = MAX_CONCURRENT):
-        print(f"[runner] Talaria Pipeline Runner started")
+        acquire_watcher_lock()
+        write_status_file()
+
+        print("[runner] Talaria Pipeline Runner started")
+        print(f"[runner] PID: {os.getpid()}, lock: {_LOCK_FILE}, status: {_STATUS_FILE}")
         print(f"[runner] TALARIA_HOME: {TALARIA_HOME}")
         print(f"[runner] TALARIA_WORK_DIR: {TALARIA_WORK_DIR}")
         print(f"[runner] Max concurrent: {max_concurrent}, poll interval: {poll_interval}s")
+        print(f"[runner] Worker timeout: {WORKER_TIMEOUT_SEC}s, no-output timeout: {WORKER_NO_OUTPUT_SEC}s, max retries: {WORKER_MAX_RETRIES}")
         print(f"[runner] Workers: hermes ({HERMES_BINARY}), claude-code ({CLAUDE_CODE_BINARY}), codex ({CODEX_BINARY})")
 
         running = True
@@ -722,6 +927,8 @@ class PipelineRunner:
         while self.active_workers:
             self._check_workers()
             time.sleep(1)
+
+        release_watcher_lock()
         print("[runner] Done.")
 
 

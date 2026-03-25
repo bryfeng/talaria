@@ -10,20 +10,14 @@ We also test the agent_watcher module's own helpers.
 """
 
 import json
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+import os
+from unittest.mock import patch
 
-import pytest
 
-# Import from the real talaria.server module (not the thin root wrapper).
-from talaria.server import (
-    _trigger_action,
-    _queue_agent,
-    _notify_telegram,
-    app,
-    AGENT_QUEUE,
-)
+# _trigger_action + AGENT_QUEUE come through talaria.server (re-exported from triggers).
+# _queue_agent + _notify_telegram are only in talaria.triggers.
+from talaria.server import _trigger_action, AGENT_QUEUE
+from talaria.triggers import _queue_agent, _notify_telegram
 
 
 # ── _trigger_action tests ────────────────────────────────────────────────────
@@ -42,8 +36,8 @@ class TestTriggerAction:
         col = {"id": "spec", "name": "Spec", "trigger": "agent_spawn", "worker": "claude-code"}
         board = {"columns": [col]}
 
-        with patch("talaria.server._queue_agent") as mock_queue, \
-             patch("talaria.server._notify_telegram"):
+        with patch("talaria.triggers._queue_agent") as mock_queue, \
+             patch("talaria.triggers._notify_telegram"):
             _trigger_action(col, card, board)
             mock_queue.assert_called_once_with(card)
 
@@ -52,7 +46,7 @@ class TestTriggerAction:
         col = {"id": "done", "name": "Done", "trigger": "notify"}
         board = {"columns": [col]}
 
-        with patch("talaria.server._notify_telegram") as mock_notify:
+        with patch("talaria.triggers._notify_telegram") as mock_notify:
             _trigger_action(col, card, board)
             mock_notify.assert_called_once()
             # Message should mention the card title and column
@@ -116,8 +110,8 @@ class TestTriggerAction:
         }
         board = {"columns": [col]}
 
-        with patch("talaria.server._create_worktree") as mock_wt, \
-             patch("talaria.server._notify_telegram"):
+        with patch("talaria.triggers._create_worktree") as mock_wt, \
+             patch("talaria.triggers._notify_telegram"):
             _trigger_action(col, card, board)
             mock_wt.assert_called_once_with(card)
 
@@ -127,8 +121,8 @@ class TestTriggerAction:
         col = {"id": "done", "name": "Done", "trigger": "notify"}
         board = {"columns": [col]}
 
-        with patch("talaria.server._cleanup_worktree") as mock_cleanup, \
-             patch("talaria.server._notify_telegram"):
+        with patch("talaria.triggers._cleanup_worktree") as mock_cleanup, \
+             patch("talaria.triggers._notify_telegram"):
             _trigger_action(col, card, board)
             mock_cleanup.assert_called_once_with(card)
 
@@ -178,92 +172,60 @@ class TestNotifyTelegram:
 
 
 # ── agent_watcher module helpers ─────────────────────────────────────────────
+# These test the agent_watcher module's HTTP client functions (api_board, api_get, api_cost).
+# We mock urllib.request.urlopen to avoid spawning real servers.
+# The Flask test client (app_client) handles server-side testing.
 
 class TestAgentWatcherHelpers:
-    def test_api_board_returns_board_dict(self, tmp_talaria_dir):
-        """agent_watcher.api_board() fetches the board from the local server."""
-        # Start the Flask server in a background thread, then call api_board
-        import threading
-        from server import app
-
-        port = 18901
-        srv = threading.Thread(
-            target=lambda: app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False),
-            daemon=True,
-        )
-        srv.start()
-        import time; time.sleep(0.5)  # let server start
-
-        # Patch TALARIA_PORT and call api_board
+    def test_api_board_returns_board_dict(self, tmp_talaria_dir, monkeypatch):
+        """agent_watcher.api_board() parses the board response correctly."""
+        from unittest.mock import MagicMock
         from agent_watcher import api_board
-        import agent_watcher
 
-        orig_port = agent_watcher.TALARIA_PORT
-        agent_watcher.TALARIA_PORT = port
-        try:
+        # Mock the HTTP response
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "columns": [{"id": "backlog", "name": "Backlog"}],
+            "meta": {"name": "Test"}
+        }).encode()
+
+        with patch("agent_watcher.urllib.request.urlopen", return_value=mock_response):
             board = api_board()
             assert board is not None
             assert "columns" in board
-        finally:
-            agent_watcher.TALARIA_PORT = orig_port
+            assert board["meta"]["name"] == "Test"
 
-    def test_api_get_returns_card(self, tmp_talaria_dir):
-        import threading
-        from server import app
-
-        port = 18902
-        srv = threading.Thread(
-            target=lambda: app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False),
-            daemon=True,
-        )
-        srv.start()
-        import time; time.sleep(0.5)
-
+    def test_api_get_returns_card(self, tmp_talaria_dir, monkeypatch):
+        """agent_watcher.api_get() parses the card response correctly."""
+        from unittest.mock import MagicMock
         from agent_watcher import api_get
-        import agent_watcher
 
-        # Create a card first via direct server import
-        from server import app as srv_app
-        srv_app.config["TESTING"] = True
-        with srv_app.test_client() as client:
-            create = client.post("/api/card", json={"title": "AW test"})
-            card_id = create.get_json()["id"]
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "id": "card123",
+            "title": "AW test",
+            "column": "backlog"
+        }).encode()
 
-        orig_port = agent_watcher.TALARIA_PORT
-        agent_watcher.TALARIA_PORT = port
-        try:
-            card = api_get(card_id)
+        with patch("agent_watcher.urllib.request.urlopen", return_value=mock_response):
+            card = api_get("card123")
             assert card is not None
+            assert card["id"] == "card123"
             assert card["title"] == "AW test"
-        finally:
-            agent_watcher.TALARIA_PORT = orig_port
 
-    def test_api_cost_log(self, tmp_talaria_dir):
-        import threading
-        from server import app
+    def test_api_cost_posts_to_endpoint(self, tmp_talaria_dir, monkeypatch):
+        """agent_watcher.api_cost() POSTs to the cost endpoint."""
+        from unittest.mock import MagicMock, call
+        from agent_watcher import api_cost
 
-        port = 18903
-        srv = threading.Thread(
-            target=lambda: app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False),
-            daemon=True,
-        )
-        srv.start()
-        import time; time.sleep(0.5)
+        mock_response = MagicMock()
+        mock_urlopen = MagicMock(return_value=mock_response)
 
-        from server import app as srv_app
-        with srv_app.test_client() as client:
-            create = client.post("/api/card", json={"title": "Cost test"})
-            card_id = create.get_json()["id"]
-
-        import agent_watcher
-        orig_port = agent_watcher.TALARIA_PORT
-        agent_watcher.TALARIA_PORT = port
-        try:
-            ok = agent_watcher.api_cost(card_id, "hermes", 1000, 0.05)
+        with patch("agent_watcher.urllib.request.urlopen", mock_urlopen):
+            ok = api_cost("card456", "hermes", 1000, 0.05)
             assert ok is True
-            # Verify cost was saved
-            card = client.get(f"/api/card/{card_id}").get_json()
-            assert len(card["cost_log"]) == 1
-            assert card["cost_log"][0]["tokens"] == 1000
-        finally:
-            agent_watcher.TALARIA_PORT = orig_port
+            # Verify it was called
+            mock_urlopen.assert_called_once()
+            call_args = mock_urlopen.call_args[0][0]
+            assert "card456" in call_args.full_url
+            assert "cost" in call_args.full_url

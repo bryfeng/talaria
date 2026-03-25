@@ -6,7 +6,6 @@ mocking the HTTP layer (urllib.request.urlopen) so we don't need a running
 server.
 """
 
-import io
 import json
 import sys
 from unittest.mock import patch, MagicMock

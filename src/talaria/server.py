@@ -13,26 +13,18 @@ from flask import Flask, send_from_directory, jsonify, request
 
 from talaria.board import (
     BASE_DIR,
-    CARDS_DIR,
-    BOARD_FILE,
-    CONFIG_FILE,
-    TALARIA_HOME,
     LOG_FILE,
     _load_board,
     _save_board,
     _load_card,
     _save_card,
     _card_path,
-    _all_cards,
     _full_board,
     _get_repos,
     _log,
-    _append_log,
 )
 from talaria.triggers import (
     _trigger_action,
-    _queue_agent,
-    _notify_telegram,
     AGENT_QUEUE,
     AGENT_QUEUE_LOCK,
 )
