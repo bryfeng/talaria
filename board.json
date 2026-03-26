@@ -9,7 +9,14 @@
     {
       "id": "backlog",
       "name": "Backlog",
-      "trigger": "notify"
+      "trigger": "notify",
+      "auto_transition": {
+        "to": "spec",
+        "when": "on_rule_pass",
+        "require": [
+          "label:auto-next"
+        ]
+      }
     },
     {
       "id": "spec",
@@ -19,7 +26,11 @@
       "context_files": [
         "talaria.md",
         "spec-guide.md"
-      ]
+      ],
+      "auto_transition": {
+        "to": "groom",
+        "when": "on_agent_success"
+      }
     },
     {
       "id": "groom",
@@ -29,12 +40,23 @@
       "context_files": [
         "talaria.md",
         "groom-guide.md"
-      ]
+      ],
+      "auto_transition": {
+        "to": "ready",
+        "when": "on_agent_success"
+      }
     },
     {
       "id": "ready",
       "name": "Ready",
-      "trigger": null
+      "trigger": null,
+      "auto_transition": {
+        "to": "in_progress",
+        "when": "on_rule_pass",
+        "require": [
+          "label:auto-next"
+        ]
+      }
     },
     {
       "id": "in_progress",
@@ -44,12 +66,21 @@
       "context_files": [
         "talaria.md",
         "coding-guide.md"
-      ]
+      ],
+      "auto_transition": {
+        "to": "review",
+        "when": "on_agent_success"
+      }
     },
     {
       "id": "review",
       "name": "Review",
-      "trigger": null
+      "trigger": null,
+      "auto_transition": {
+        "to": "done",
+        "when": "on_checks_pass",
+        "on_fail": "in_progress"
+      }
     },
     {
       "id": "done",

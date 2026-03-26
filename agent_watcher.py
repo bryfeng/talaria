@@ -650,8 +650,62 @@ def _run_ci_tests(card_id: str, tests: dict) -> tuple:
         return False, f"Test command failed to run: {e}"
 
 
+def _legacy_auto_transition(col_id: str) -> Optional[dict]:
+    """Backward-compatible transition defaults when board.json has no policy."""
+    mapping = {
+        "spec": {"to": "groom", "when": "on_agent_success"},
+        "groom": {"to": "ready", "when": "on_agent_success"},
+        "in_progress": {"to": "review", "when": "on_agent_success"},
+        "review": {"to": "done", "when": "on_checks_pass"},
+    }
+    return mapping.get(col_id)
+
+
+def _get_auto_transition(col_config: dict) -> Optional[dict]:
+    """Return normalized auto-transition policy from a column config."""
+    policy = col_config.get("auto_transition")
+    if isinstance(policy, dict) and policy.get("to"):
+        return {
+            "to": policy.get("to"),
+            "when": policy.get("when", "on_agent_success"),
+            "require": policy.get("require", []) or [],
+            "on_fail": policy.get("on_fail"),
+        }
+    return _legacy_auto_transition(col_config.get("id", ""))
+
+
+def _requirements_pass(card: dict, requirements: list[str]) -> bool:
+    """Validate lightweight field/label requirements.
+
+    Requirement forms:
+      - "field_name" or "field:field_name"
+      - "label:some-label"
+    """
+    for req in requirements:
+        req = (req or "").strip()
+        if not req:
+            continue
+
+        if req.startswith("label:"):
+            want = req.split(":", 1)[1].strip()
+            labels = card.get("labels", []) or []
+            if want not in labels:
+                return False
+            continue
+
+        field = req.split(":", 1)[1].strip() if req.startswith("field:") else req
+        val = card.get(field)
+        if val is None:
+            return False
+        if isinstance(val, str) and not val.strip():
+            return False
+        if isinstance(val, (list, dict)) and not val:
+            return False
+    return True
+
+
 def handle_worker_done(worker: Worker, success: bool = True):
-    """Called when a worker finishes. Updates the card and advances the pipeline."""
+    """Called when a worker finishes. Updates the card and advances by policy."""
     worker.cleanup()
 
     card_id = worker.card_id
@@ -672,46 +726,30 @@ def handle_worker_done(worker: Worker, success: bool = True):
     # Log cost entry (tokens/cost populated by agent itself if known; runner logs 0 as a timestamp marker)
     api_cost(card_id, agent=worker.worker_type, tokens=0, cost_usd=0.0)
 
-    # Advance to next column
-    next_col = _get_next_column(worker.col_config["id"])
-    if not next_col:
+    policy = _get_auto_transition(worker.col_config or {})
+    if not policy or policy.get("when") != "on_agent_success":
         return
 
-    # CI gate: when advancing to review, run tests if configured
-    if next_col == "review":
-        card = api_get(card_id)
-        tests = card.get("tests") if card else None
-        if tests and isinstance(tests, dict) and tests.get("command"):
-            api_patch(card_id, {"column": "review"})
-            api_note(card_id, "Moved to review by pipeline runner.", author="runner")
-            notify(f"🔬 Card #{card_id} entered *review* — running CI tests...")
+    card = api_get(card_id) or {"id": card_id}
+    requirements = policy.get("require", []) or []
+    if not _requirements_pass(card, requirements):
+        on_fail = policy.get("on_fail")
+        api_note(
+            card_id,
+            f"[runner] Transition requirements failed for {worker.col_config.get('id')} → {policy.get('to')}: {requirements}",
+            author="runner",
+        )
+        if on_fail:
+            api_patch(card_id, {"column": on_fail})
+        return
 
-            passed, output = _run_ci_tests(card_id, tests)
+    to_col = policy.get("to")
+    if not to_col:
+        return
 
-            if passed:
-                api_patch(card_id, {"column": "done"})
-                api_note(card_id, f"[CI] Tests passed. Auto-advanced to done.\n```\n{output[:2000]}\n```", author="runner")
-                notify(f"✅ Card #{card_id} CI passed — moved to *done*")
-            else:
-                api_patch(card_id, {"column": "in_progress"})
-                api_note(card_id, f"[CI] Tests failed. Moved back to in_progress.\n```\n{output[:2000]}\n```", author="runner")
-                notify(f"❌ Card #{card_id} CI failed — moved back to *in_progress*")
-            return
-
-    api_patch(card_id, {"column": next_col})
-    api_note(card_id, f"Moved to {next_col} by pipeline runner.", author="runner")
-    notify(f"✅ Card #{card_id} moved to *{next_col}*")
-
-
-def _get_next_column(current_col: str) -> Optional[str]:
-    """Map column flow. Groom → Ready, In Progress → Review, Review → Done."""
-    flow = {
-        "spec": "groom",
-        "groom": "ready",
-        "in_progress": "review",
-        "review": "done",
-    }
-    return flow.get(current_col)
+    api_patch(card_id, {"column": to_col})
+    api_note(card_id, f"Moved to {to_col} by pipeline runner policy.", author="runner")
+    notify(f"✅ Card #{card_id} moved to *{to_col}*")
 
 
 # ── Main loop ────────────────────────────────────────────────────────────────
@@ -829,9 +867,11 @@ class PipelineRunner:
         if summary:
             api_note(card["id"], f"[auto-summary] {summary}", author="runner")
 
-    def _run_review_gate(self, card: dict):
-        """Run tests for a card in Review. Advance to Done on pass, back to In Progress on fail."""
+    def _run_review_gate(self, card: dict, col_config: Optional[dict] = None):
+        """Run checks/tests for a card in Review. Advance on pass, fallback on fail."""
         card_id = card["id"]
+        col_config = col_config or {"id": "review"}
+        policy = _get_auto_transition(col_config) or {"to": "done", "when": "on_checks_pass", "require": [], "on_fail": "in_progress"}
 
         # Auto-summary on review entry (only once — skip if note already exists)
         if AUTO_SUMMARY and card.get("worktree_path"):
@@ -841,12 +881,21 @@ class PipelineRunner:
                 if summary:
                     api_note(card_id, f"[auto-summary] {summary}", author="runner")
 
+        requirements = policy.get("require", []) or []
+        if not _requirements_pass(card, requirements):
+            on_fail = policy.get("on_fail") or "in_progress"
+            api_note(card_id, f"[review-gate] requirements failed: {requirements}", author="runner")
+            if on_fail:
+                api_patch(card_id, {"column": on_fail})
+            return
+
         tests = card.get("tests")
 
         if not tests:
-            # No tests defined — auto-advance to Done
-            api_patch(card_id, {"column": "done"})
-            api_note(card_id, "[review-gate] No tests defined — auto-advancing to Done.", author="runner")
+            # No tests defined — auto-advance to policy target
+            to_col = policy.get("to", "done")
+            api_patch(card_id, {"column": to_col})
+            api_note(card_id, f"[review-gate] No tests defined — auto-advancing to {to_col}.", author="runner")
             notify(f"✅ Card #{card_id} passed review (no tests defined)")
             return
 
@@ -875,14 +924,18 @@ class PipelineRunner:
             )
             exit_code = result.returncode
         except subprocess.TimeoutExpired:
+            on_fail = policy.get("on_fail") or "in_progress"
             api_note(card_id, "[review-gate] TIMEOUT — test command exceeded 300s.", author="runner")
-            api_patch(card_id, {"column": "in_progress"})
-            notify(f"❌ Card #{card_id} review timed out (300s) — back to In Progress.")
+            if on_fail:
+                api_patch(card_id, {"column": on_fail})
+            notify(f"❌ Card #{card_id} review timed out (300s) — back to {on_fail}.")
             return
         except Exception as e:
+            on_fail = policy.get("on_fail") or "in_progress"
             api_note(card_id, f"[review-gate] ERROR running tests: {e}", author="runner")
-            api_patch(card_id, {"column": "in_progress"})
-            notify(f"❌ Card #{card_id} review error: {e} — back to In Progress.")
+            if on_fail:
+                api_patch(card_id, {"column": on_fail})
+            notify(f"❌ Card #{card_id} review error: {e} — back to {on_fail}.")
             return
 
         passed = (exit_code == 0) if pass_if == "exit_0" else False
@@ -890,14 +943,17 @@ class PipelineRunner:
 
         if passed:
             summary = output[:500] if output else "(no output)"
+            to_col = policy.get("to", "done")
             api_note(card_id, f"[review-gate] ✅ Tests passed (exit {exit_code}). Output: {summary}", author="runner")
-            api_patch(card_id, {"column": "done"})
-            notify(f"✅ Card #{card_id} passed review — tests passed, moved to Done.")
+            api_patch(card_id, {"column": to_col})
+            notify(f"✅ Card #{card_id} passed review — tests passed, moved to {to_col}.")
         else:
             summary = output[:1000] if output else f"(exit {exit_code})"
+            on_fail = policy.get("on_fail") or "in_progress"
             api_note(card_id, f"[review-gate] ❌ Tests FAILED (exit {exit_code}). Output:\n{output[:2000]}", author="runner")
-            api_patch(card_id, {"column": "in_progress"})
-            notify(f"❌ Card #{card_id} tests failed — back to In Progress. Output:\n{summary[:500]}")
+            if on_fail:
+                api_patch(card_id, {"column": on_fail})
+            notify(f"❌ Card #{card_id} tests failed — back to {on_fail}. Output:\n{summary[:500]}")
 
     def run(self, poll_interval: int = POLL_INTERVAL, max_concurrent: int = MAX_CONCURRENT):
         acquire_watcher_lock()
@@ -938,9 +994,9 @@ class PipelineRunner:
                     col_id = card.get("column")
                     col_config = columns.get(col_id, {})
 
-                    # Review column: run CI gate if tests are defined
+                    # Review column: run checks/tests policy
                     if col_id == "review":
-                        self._run_review_gate(card)
+                        self._run_review_gate(card, col_config)
                         continue
 
                     # Done column: append auto-summary if not already present
@@ -948,8 +1004,21 @@ class PipelineRunner:
                         self._run_done_summary(card)
                         continue
 
+                    # Worker-driven columns advance on on_agent_success.
                     if col_config.get("trigger") == "agent_spawn":
                         self._dispatch_card(card, col_config)
+                        continue
+
+                    # Rule-based columns advance on on_rule_pass.
+                    policy = _get_auto_transition(col_config)
+                    if policy and policy.get("when") == "on_rule_pass":
+                        reqs = policy.get("require", []) or []
+                        if _requirements_pass(card, reqs):
+                            to_col = policy.get("to")
+                            if to_col:
+                                api_patch(card["id"], {"column": to_col})
+                                api_note(card["id"], f"Moved to {to_col} by rule policy.", author="runner")
+                                notify(f"➡️ Card #{card['id']} auto-moved to *{to_col}*")
 
             # Sleep between polls
             for _ in range(poll_interval):

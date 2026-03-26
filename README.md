@@ -95,15 +95,15 @@ server.py (Flask :8400) ──reads/writes──▶ cards/*.md   ← one file pe
 
 | Column | Trigger | Action |
 |--------|---------|--------|
-| Backlog | — | Default holding area |
-| Spec | `agent_spawn` | Dispatches a spec-writing agent |
-| Groom | `agent_spawn` | Groom/review agent — priority + labels + notes injected |
-| Ready | — | Ready to pick up |
-| In Progress | `agent_spawn` | Dispatches an implementation agent |
-| Review | — | Human review gate + CI run (`tests.command`) |
+| Backlog | `notify` + `auto_transition(on_rule_pass)` | Auto-moves to Spec when card has label `auto-next` |
+| Spec | `agent_spawn` + `auto_transition(on_agent_success)` | Dispatches a spec-writing agent then advances to Groom |
+| Groom | `agent_spawn` + `auto_transition(on_agent_success)` | Groom/review agent then advances to Ready |
+| Ready | `auto_transition(on_rule_pass)` | Auto-moves to In Progress when card has label `auto-next` |
+| In Progress | `agent_spawn` + `auto_transition(on_agent_success)` | Dispatches implementation agent then advances to Review |
+| Review | `auto_transition(on_checks_pass)` | Runs review checks/tests and advances/falls back by policy |
 | Done | `notify` | Telegram notification + rolling cap of 20 (oldest auto-archived) |
 
-Add or rename columns in `board.json`. Assign triggers to automate any workflow.
+Add or rename columns in `board.json`. Use per-column `auto_transition` (`to`, `when`, `require`, `on_fail`) for automated funnel flow.
 
 Archived cards are moved to `cards/archive/` to keep Done focused on recent operational history.
 A lightweight graph index is appended at `cards/archive/graph.jsonl` with domains/components/edges for architecture-aware history queries.
