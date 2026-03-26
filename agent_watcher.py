@@ -48,6 +48,22 @@ MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "2"))
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "15"))
 AUTO_SUMMARY = os.getenv("AUTO_SUMMARY", "").lower() in ("1", "true", "yes")
 
+ARCH_REFRESH_ENABLED = os.getenv("ARCH_REFRESH_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+ARCH_REFRESH_INTERVAL_SEC = int(os.getenv("ARCH_REFRESH_INTERVAL_SEC", "600"))
+ARCH_DOC_MAX_AGE_SEC = int(os.getenv("ARCH_DOC_MAX_AGE_SEC", str(14 * 24 * 3600)))
+ARCH_REFRESH_TITLE = "Architecture Diagram (auto-refresh)"
+ARCH_REFRESH_LABEL = "system:auto-arch-refresh"
+ARCH_CORE_FILES = [
+    "agent_watcher.py",
+    "board.json",
+    "src/talaria/server.py",
+    "src/talaria/board.py",
+    "src/talaria/triggers.py",
+    "src/talaria/cli.py",
+    "src/talaria/telegram_ui.py",
+]
+ARCH_DOC_FILES = ["docs/architecture.md", "docs/architecture.excalidraw.json"]
+
 
 def _is_truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
@@ -237,6 +253,91 @@ def api_note(card_id: str, text: str, author: str = "runner") -> bool:
     except Exception as e:
         print(f"[runner] Failed to add note to {card_id}: {e}")
         return False
+
+
+def api_create(data: dict) -> Optional[dict]:
+    try:
+        url = f"http://localhost:{TALARIA_PORT}/api/card"
+        body = json.dumps(data).encode()
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        print(f"[runner] Failed to create card: {e}")
+        return None
+
+
+def _find_open_arch_refresh_card(cards: list[dict]) -> Optional[dict]:
+    for card in cards:
+        if card.get("column") == "done":
+            continue
+        labels = card.get("labels", []) or []
+        if ARCH_REFRESH_LABEL in labels:
+            return card
+        if card.get("title") == ARCH_REFRESH_TITLE:
+            return card
+    return None
+
+
+def _arch_refresh_card_payload(reason: str) -> dict:
+    description = (
+        "Regenerate architecture documentation because source architecture changed or docs became stale.\n\n"
+        "Tasks:\n"
+        "1) Run talaria-architecture skill to regenerate docs/architecture.md.\n"
+        "2) Update docs/architecture.excalidraw.json to match current flows.\n"
+        "3) Include note with changed components + validation steps.\n\n"
+        f"Auto-detected reason: {reason}"
+    )
+    return {
+        "title": ARCH_REFRESH_TITLE,
+        "description": description,
+        "column": "ready",
+        "priority": "medium",
+        "labels": [
+            "type:docs",
+            "domain:architecture",
+            "component:architecture-diagram",
+            ARCH_REFRESH_LABEL,
+            "auto-next",
+        ],
+    }
+
+
+def _architecture_refresh_reason(repo_root: Path, now_ts: Optional[float] = None) -> Optional[str]:
+    now_ts = now_ts or time.time()
+
+    doc_paths = [repo_root / rel for rel in ARCH_DOC_FILES]
+    for p in doc_paths:
+        if not p.exists():
+            return f"missing_doc:{p.relative_to(repo_root)}"
+
+    doc_mtime = min(p.stat().st_mtime for p in doc_paths)
+
+    newest_core_mtime = 0.0
+    newest_core_rel = None
+    for rel in ARCH_CORE_FILES:
+        path = repo_root / rel
+        if not path.exists():
+            continue
+        mtime = path.stat().st_mtime
+        if mtime > newest_core_mtime:
+            newest_core_mtime = mtime
+            newest_core_rel = rel
+
+    if newest_core_mtime > doc_mtime:
+        return f"core_newer:{newest_core_rel}"
+
+    age_sec = now_ts - max(p.stat().st_mtime for p in doc_paths)
+    if age_sec > ARCH_DOC_MAX_AGE_SEC:
+        days = int(age_sec // 86400)
+        return f"stale_docs:{days}d"
+
+    return None
 
 
 def notify(msg: str):
@@ -759,6 +860,7 @@ class PipelineRunner:
         self.active_workers: dict[str, Worker] = {}  # card_id → Worker
         self.retry_counts: dict[str, int] = {}  # card_id → retry count
         self.last_poll = 0
+        self.last_arch_refresh_check = 0.0
 
     def _handle_timeout(self, worker: Worker, reason: str):
         """Kill a timed-out/hung worker, log the failure, and retry or escalate."""
@@ -867,6 +969,32 @@ class PipelineRunner:
         if summary:
             api_note(card["id"], f"[auto-summary] {summary}", author="runner")
 
+    def _maybe_queue_architecture_refresh(self, board: dict) -> None:
+        """Create an architecture-refresh card when docs are stale or out-of-date."""
+        if not ARCH_REFRESH_ENABLED:
+            return
+
+        repo_root = Path(TALARIA_WORK_DIR).expanduser()
+        if not repo_root.exists():
+            return
+
+        reason = _architecture_refresh_reason(repo_root)
+        if not reason:
+            return
+
+        cards = board.get("cards", []) or []
+        existing = _find_open_arch_refresh_card(cards)
+        if existing:
+            return
+
+        created = api_create(_arch_refresh_card_payload(reason))
+        if not created:
+            return
+
+        cid = created.get("id", "?")
+        api_note(cid, f"[system] Auto-created architecture refresh card ({reason}).", author="***")
+        notify(f"🏗️ Auto-created architecture refresh card #{cid} ({reason}).")
+
     def _run_review_gate(self, card: dict, col_config: Optional[dict] = None):
         """Run checks/tests for a card in Review. Advance on pass, fallback on fail."""
         card_id = card["id"]
@@ -965,6 +1093,7 @@ class PipelineRunner:
         print(f"[runner] TALARIA_WORK_DIR: {TALARIA_WORK_DIR}")
         print(f"[runner] Max concurrent: {max_concurrent}, poll interval: {poll_interval}s")
         print(f"[runner] Worker timeout: {WORKER_TIMEOUT_SEC}s, no-output timeout: {WORKER_NO_OUTPUT_SEC}s, max retries: {WORKER_MAX_RETRIES}")
+        print(f"[runner] Arch refresh: enabled={ARCH_REFRESH_ENABLED}, interval={ARCH_REFRESH_INTERVAL_SEC}s, max_age={ARCH_DOC_MAX_AGE_SEC}s")
         print(f"[runner] Workers: hermes ({HERMES_BINARY}), claude-code ({CLAUDE_CODE_BINARY}), codex ({CODEX_BINARY})")
 
         running = True
@@ -984,6 +1113,11 @@ class PipelineRunner:
             if board:
                 columns = {c["id"]: c for c in board.get("columns", [])}
                 cards = board.get("cards", [])
+
+                now = time.time()
+                if now - self.last_arch_refresh_check >= max(ARCH_REFRESH_INTERVAL_SEC, 1):
+                    self._maybe_queue_architecture_refresh(board)
+                    self.last_arch_refresh_check = now
 
                 active_count = len(self.active_workers)
 
