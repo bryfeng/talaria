@@ -245,6 +245,41 @@ class TestActivity:
         assert isinstance(rv.get_json(), list)
 
 
+class TestHistory:
+    def test_history_returns_done_cards(self, app_client):
+        create = app_client.post(
+            "/api/card",
+            json={
+                "title": "History card",
+                "labels": ["feature", "domain:telegram", "component:telegram_ui"],
+            },
+        )
+        card_id = create.get_json()["id"]
+        app_client.patch(f"/api/card/{card_id}", json={"column": "done"})
+
+        rv = app_client.get("/api/history")
+        assert rv.status_code == 200
+        rows = rv.get_json()
+        assert any(r.get("card_id") == card_id for r in rows)
+
+    def test_history_filters_by_domain(self, app_client):
+        c1 = app_client.post(
+            "/api/card",
+            json={"title": "Telegram feature", "labels": ["feature", "domain:telegram", "component:telegram_ui"]},
+        ).get_json()["id"]
+        c2 = app_client.post(
+            "/api/card",
+            json={"title": "Watcher fix", "labels": ["bugfix", "domain:watcher", "component:agent_watcher"]},
+        ).get_json()["id"]
+        app_client.patch(f"/api/card/{c1}", json={"column": "done"})
+        app_client.patch(f"/api/card/{c2}", json={"column": "done"})
+
+        rv = app_client.get("/api/history?domain=telegram")
+        rows = rv.get_json()
+        assert rows
+        assert all("telegram" in r.get("domains", []) for r in rows)
+
+
 # ── Column trigger integration ─────────────────────────────────────────────────
 
 class TestColumnTriggers:
@@ -281,6 +316,12 @@ class TestColumnTriggers:
         assert len(archived) == 1
         # First completed card should be archived first.
         assert archived[0].stem.startswith(created_ids[0])
+
+        graph_file = tmp_talaria_dir["archive_dir"] / "graph.jsonl"
+        assert graph_file.exists()
+        rows = [line for line in graph_file.read_text().splitlines() if line.strip()]
+        assert len(rows) == 1
+        assert created_ids[0] in rows[0]
 
     def test_agent_spawn_trigger_column_accepts_card(self, app_client):
         """Cards can be moved to agent_spawn trigger columns (spec, groom)."""

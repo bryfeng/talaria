@@ -28,6 +28,10 @@ CONFIG_FILE = BASE_DIR / "talaria.config.json"
 TALARIA_HOME = Path(os.getenv("TALARIA_HOME", os.path.expanduser("~/.talaria/talaria")))
 LOG_FILE = BASE_DIR / "logs" / "talaria.log"
 DONE_CAP = 20
+GRAPH_SCHEMA_VERSION = "1"
+PRIMARY_TYPES = {"feature", "bugfix", "infra", "docs", "chore"}
+DEFAULT_DOMAIN = "general"
+DEFAULT_COMPONENT = "general"
 
 
 # ── config I/O ─────────────────────────────────────────────────────────────────
@@ -221,10 +225,147 @@ def _full_board() -> dict:
     return board
 
 
+def _archive_graph_file() -> Path:
+    return ARCHIVE_DIR / "graph.jsonl"
+
+
+def _extract_label_values(labels: list[str], prefix: str) -> list[str]:
+    values = []
+    for label in labels or []:
+        if not isinstance(label, str):
+            continue
+        if label.startswith(prefix):
+            value = label[len(prefix):].strip().lower()
+            if value:
+                values.append(value)
+    return sorted(set(values))
+
+
+def _primary_type(labels: list[str]) -> str:
+    for label in labels or []:
+        if isinstance(label, str) and label.lower() in PRIMARY_TYPES:
+            return label.lower()
+    return "chore"
+
+
+def _build_archive_graph_entry(card: dict, archived_path: Path) -> dict:
+    labels = card.get("labels", [])
+    domains = _extract_label_values(labels, "domain:") or [DEFAULT_DOMAIN]
+    components = _extract_label_values(labels, "component:") or [DEFAULT_COMPONENT]
+
+    entry = {
+        "schema": f"talaria.archive-graph.v{GRAPH_SCHEMA_VERSION}",
+        "card_id": card.get("id"),
+        "title": card.get("title", ""),
+        "type": _primary_type(labels),
+        "completed_at": card.get("updated_at") or datetime.now(timezone.utc).isoformat(),
+        "release": card.get("release") or None,
+        "domains": domains,
+        "components": components,
+        "depends_on": _extract_label_values(labels, "depends:") + _extract_label_values(labels, "depends_on:"),
+        "supersedes": _extract_label_values(labels, "supersedes:"),
+        "touches": _extract_label_values(labels, "touch:"),
+        "summary": (card.get("description") or "")[:240],
+        "archived_path": str(archived_path.relative_to(BASE_DIR)) if archived_path.is_absolute() else str(archived_path),
+    }
+    return entry
+
+
+def _append_archive_graph_entry(entry: dict) -> None:
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    path = _archive_graph_file()
+    with open(path, "a") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _iter_archive_graph_entries() -> list[dict]:
+    path = _archive_graph_file()
+    if not path.exists():
+        return []
+    entries = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except Exception:
+                continue
+    return entries
+
+
+def _history_query(
+    q: str = "",
+    domain: str | None = None,
+    component: str | None = None,
+    type_: str | None = None,
+    release: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    q = (q or "").strip().lower()
+    domain = (domain or "").strip().lower() or None
+    component = (component or "").strip().lower() or None
+    type_ = (type_ or "").strip().lower() or None
+    release = (release or "").strip().lower() or None
+
+    archived = list(_iter_archive_graph_entries())
+    live_done = []
+    for card in _all_cards():
+        if card.get("column") != "done":
+            continue
+        live_done.append(
+            {
+                "schema": f"talaria.archive-graph.v{GRAPH_SCHEMA_VERSION}",
+                "card_id": card.get("id"),
+                "title": card.get("title", ""),
+                "type": _primary_type(card.get("labels", [])),
+                "completed_at": card.get("updated_at") or card.get("created_at"),
+                "release": card.get("release") or None,
+                "domains": _extract_label_values(card.get("labels", []), "domain:") or [DEFAULT_DOMAIN],
+                "components": _extract_label_values(card.get("labels", []), "component:") or [DEFAULT_COMPONENT],
+                "depends_on": _extract_label_values(card.get("labels", []), "depends:") + _extract_label_values(card.get("labels", []), "depends_on:"),
+                "supersedes": _extract_label_values(card.get("labels", []), "supersedes:"),
+                "touches": _extract_label_values(card.get("labels", []), "touch:"),
+                "summary": (card.get("description") or "")[:240],
+                "archived_path": None,
+                "source": "done",
+            }
+        )
+
+    rows = archived + live_done
+
+    def match(row: dict) -> bool:
+        if domain and domain not in row.get("domains", []):
+            return False
+        if component and component not in row.get("components", []):
+            return False
+        if type_ and row.get("type") != type_:
+            return False
+        if release and str(row.get("release") or "").lower() != release:
+            return False
+        if q:
+            hay = " ".join(
+                [
+                    str(row.get("card_id", "")),
+                    str(row.get("title", "")),
+                    str(row.get("summary", "")),
+                    " ".join(row.get("domains", [])),
+                    " ".join(row.get("components", [])),
+                ]
+            ).lower()
+            return q in hay
+        return True
+
+    rows = [r for r in rows if match(r)]
+    rows.sort(key=lambda r: r.get("completed_at") or "", reverse=True)
+    return rows[: max(1, limit)]
+
+
 def _archive_excess_done_cards(done_cap: int = DONE_CAP) -> list[str]:
     """Archive oldest Done cards to keep Done as a rolling operational window.
 
-    Archive is file-based (cards/archive/*.md) to stay lightweight.
+    Archive is file-based (cards/archive/*.md) with graph index updates.
     Returns a list of archived card IDs.
     """
     done_cards = [c for c in _all_cards() if c.get("column") == "done"]
@@ -252,6 +393,7 @@ def _archive_excess_done_cards(done_cap: int = DONE_CAP) -> list[str]:
             dst = ARCHIVE_DIR / f"{card_id}-{stamp}.md"
 
         shutil.move(str(src), str(dst))
+        _append_archive_graph_entry(_build_archive_graph_entry(card, dst))
         _log("archived", card, from_col="done", to_col="archive")
         archived_ids.append(card_id)
 

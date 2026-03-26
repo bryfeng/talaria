@@ -179,6 +179,23 @@ class TestHandleMessage:
             mock_api.assert_called_with("POST", "/api/card", {"title": "New thing", "column": "backlog"})
             assert "xy99" in mock_send.call_args[0][1]
 
+    def test_history_command(self):
+        rows = [{"card_id": "h1", "title": "History row", "type": "feature", "domains": ["telegram"], "components": ["telegram_ui"]}]
+        with patch.object(ui, "api", return_value=rows) as mock_api, \
+             patch.object(ui, "tg_send") as mock_send:
+            ui.handle_message(self._msg("/history telegram domain=telegram"))
+            called = mock_api.call_args[0][1]
+            assert called.startswith("/api/history")
+            assert "domain=telegram" in called
+            mock_send.assert_called_once()
+            assert "History row" in mock_send.call_args[0][1]
+
+    def test_history_command_no_matches(self):
+        with patch.object(ui, "api", return_value=[]), \
+             patch.object(ui, "tg_send") as mock_send:
+            ui.handle_message(self._msg("/history domain=watcher"))
+            assert "No history matches" in mock_send.call_args[0][1]
+
     def test_note_conversational_flow(self):
         """After pressing 📝 Note, next non-command message posts the note."""
         chat_id = "77"

@@ -26,6 +26,7 @@ from talaria.board import (
     _get_repos,
     _log,
     _archive_excess_done_cards,
+    _history_query,
 )
 from talaria.triggers import (
     _trigger_action,
@@ -250,6 +251,26 @@ def get_activity():
                 except Exception:
                     pass
     return jsonify(entries[:50])
+
+
+@app.route("/api/history")
+def get_history():
+    """Query completed work across live Done + archive graph index."""
+    q = request.args.get("q", "")
+    domain = request.args.get("domain")
+    component = request.args.get("component")
+    type_ = request.args.get("type")
+    release = request.args.get("release")
+    limit = request.args.get("limit", default=20, type=int)
+    rows = _history_query(
+        q=q,
+        domain=domain,
+        component=component,
+        type_=type_,
+        release=release,
+        limit=limit,
+    )
+    return jsonify(rows)
 
 
 @app.route("/api/arch/meta")

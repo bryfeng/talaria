@@ -106,6 +106,7 @@ server.py (Flask :8400) ──reads/writes──▶ cards/*.md   ← one file pe
 Add or rename columns in `board.json`. Assign triggers to automate any workflow.
 
 Archived cards are moved to `cards/archive/` to keep Done focused on recent operational history.
+A lightweight graph index is appended at `cards/archive/graph.jsonl` with domains/components/edges for architecture-aware history queries.
 
 ## Self-hosting guardrails (lean)
 
@@ -168,6 +169,7 @@ Commands:
 - /card <id>
 - /create <title>
 - /note <id> <text>
+- /history [q] [domain=..] [component=..] [type=..] [release=..]
 
 Inline actions:
 - Move: Spec, Groom, Ready, In Progress, Review
@@ -187,7 +189,7 @@ export TALARIA_TELEGRAM_ALLOWED_CHATS=<chat_id_1>,<chat_id_2>
 ```
 
 Behavior in Hermes Telegram:
-- /board, /next, /card, /create, /note are routed API-first to Talaria
+- /board, /next, /card, /create, /note, /history are routed API-first to Talaria
 - talaria:* inline callbacks are handled natively
 - If Talaria is offline, users get an explicit error (no silent local-file fallback)
 
@@ -217,6 +219,7 @@ PATCH  /api/card/:id        — Update card (column, priority, labels, etc.)
 DELETE /api/card/:id        — Delete card
 POST   /api/card/:id/note   — Add status note
 GET    /api/activity        — Recent activity log
+GET    /api/history         — Query done + archive graph (q/domain/component/type/release)
 GET    /api/agent_queue     — View agent dispatch queue
 POST   /api/agent_queue/pop — Pop next card from queue
 ```

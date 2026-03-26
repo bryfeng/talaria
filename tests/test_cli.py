@@ -23,6 +23,7 @@ from talaria.cli import (
     cmd_log,
     cmd_context,
     cmd_note,
+    cmd_history,
     _request,
     COMMANDS,
 )
@@ -310,6 +311,23 @@ class TestCmdNote:
 
 # ── _request error handling ─────────────────────────────────────────────────
 
+class TestCmdHistory:
+    def test_history_calls_api_with_filters(self, capsys):
+        with patch("talaria.cli._request") as mock_req:
+            mock_req.return_value = [{"card_id": "a1", "title": "Ship"}]
+            cmd_history(["watcher", "--domain", "watcher", "--component", "agent_watcher", "--type", "bugfix", "--limit", "5"])
+
+        mock_req.assert_called_once()
+        assert mock_req.call_args[0][0] == "GET"
+        path = mock_req.call_args[0][1]
+        assert path.startswith("/api/history?")
+        assert "domain=watcher" in path
+        assert "component=agent_watcher" in path
+        assert "type=bugfix" in path
+        out = capsys.readouterr().out
+        assert "a1" in out
+
+
 class TestRequestErrors:
     def test_http_error_prints_json_and_exits(self, capsys):
         import urllib.error
@@ -361,6 +379,7 @@ class TestCommandsMap:
         assert "log" in COMMANDS
         assert "context" in COMMANDS
         assert "note" in COMMANDS
+        assert "history" in COMMANDS
 
     def test_unknown_command_exits(self, capsys):
         with patch.object(sys, "argv", ["talaria", "bad-cmd"]):

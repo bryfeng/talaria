@@ -10,6 +10,7 @@ Commands:
   /card <id>            Show card context + inline move buttons
   /create <title>       Create backlog card
   /note <id> <text>     Add note to card
+  /history [filters]    Query done/archive history graph
   /help                 Show help
 
 Environment:
@@ -218,7 +219,8 @@ def handle_message(msg: dict[str, Any]) -> None:
             "/next\n"
             "/card <id>\n"
             "/create <title>\n"
-            "/note <id> <text>",
+            "/note <id> <text>\n"
+            "/history [q] [domain=..] [component=..] [type=..] [release=..]",
         )
         return
 
@@ -247,6 +249,43 @@ def handle_message(msg: dict[str, Any]) -> None:
             tg_send(chat_id, f"Card not found: {args} ({e})")
             return
         tg_send(chat_id, card_text(full), reply_markup=move_keyboard(full["id"]))
+        return
+
+    if cmd == "/history":
+        params = []
+        free = []
+        for token in args.split():
+            if "=" in token:
+                k, v = token.split("=", 1)
+                k = k.strip().lower()
+                v = v.strip()
+                if k in {"domain", "component", "type", "release", "limit"} and v:
+                    params.append((k, v))
+            else:
+                free.append(token)
+
+        if free:
+            params.append(("q", " ".join(free)))
+
+        query = ""
+        if params:
+            from urllib.parse import urlencode
+
+            query = "?" + urlencode(params)
+
+        rows = api("GET", f"/api/history{query}")
+        if not rows:
+            tg_send(chat_id, "No history matches.")
+            return
+
+        lines = ["History (top matches):"]
+        for row in rows[:8]:
+            dom = ",".join(row.get("domains", [])[:2])
+            comp = ",".join(row.get("components", [])[:2])
+            lines.append(
+                f"- {row.get('card_id')} {row.get('title')} [{row.get('type')}] d={dom} c={comp}"
+            )
+        tg_send(chat_id, "\n".join(lines))
         return
 
     if cmd == "/create":

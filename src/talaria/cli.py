@@ -11,6 +11,7 @@ Commands:
   talaria log <card-id>           Show activity log / notes for a card
   talaria context <card-id>       Show full card context (for agents)
   talaria note <card-id> <text>   Add a status note to a card
+  talaria history [opts]          Query done/archive history graph
 
 create options:
   -p, --priority P0|P1|P2|P3      Priority level (default: medium)
@@ -182,6 +183,40 @@ def cmd_note(args):
     print(json.dumps(note))
 
 
+def cmd_history(args):
+    parser = argparse.ArgumentParser(prog="talaria history", description="Query done/archive history")
+    parser.add_argument("q", nargs="?", default="", help="Optional keyword query")
+    parser.add_argument("--domain", default="", help="Filter by domain tag (e.g. telegram)")
+    parser.add_argument("--component", default="", help="Filter by component tag")
+    parser.add_argument("--type", dest="type_", default="", help="feature|bugfix|infra|docs|chore")
+    parser.add_argument("--release", default="", help="Release tag")
+    parser.add_argument("--limit", type=int, default=20, help="Max rows (default 20)")
+    parsed = parser.parse_args(args)
+
+    params = []
+    if parsed.q:
+        params.append(("q", parsed.q))
+    if parsed.domain:
+        params.append(("domain", parsed.domain))
+    if parsed.component:
+        params.append(("component", parsed.component))
+    if parsed.type_:
+        params.append(("type", parsed.type_))
+    if parsed.release:
+        params.append(("release", parsed.release))
+    if parsed.limit:
+        params.append(("limit", str(parsed.limit)))
+
+    query = ""
+    if params:
+        from urllib.parse import urlencode
+
+        query = "?" + urlencode(params)
+
+    rows = _request("GET", f"/api/history{query}")
+    print(json.dumps(rows, indent=2))
+
+
 COMMANDS = {
     "list": cmd_list,
     "status": cmd_status,
@@ -190,6 +225,7 @@ COMMANDS = {
     "log": cmd_log,
     "context": cmd_context,
     "note": cmd_note,
+    "history": cmd_history,
 }
 
 
