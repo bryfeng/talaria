@@ -40,37 +40,40 @@
 
 ## Quick Start
 
-```bash
-# Install (pip installable)
-pip install talaria
-
-# Point at your project
-export TALARIA_WORK_DIR=~/my-project
-
-# Start the board + agent watcher
-talaria-server &
-open http://localhost:8400
-
-# Create a card and drop it in In Progress — an agent spawns automatically
-talaria create "Build user auth"
-talaria move <card-id> in_progress
-```
-
-Or clone and run:
+### OSS default (single-repo, fastest path)
 
 ```bash
 git clone https://github.com/bryfeng/talaria.git
 cd talaria
-pip install -e .
-talaria-server &
-open http://localhost:8400
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+
+# Start API server
+TALARIA_WORK_DIR="$(pwd)" talaria-server
 ```
 
-Or with Docker:
+In another terminal:
 
 ```bash
-docker-compose up
+cd talaria
+source .venv/bin/activate
+python agent_watcher.py
 ```
+
+Then open `http://localhost:8400` and create your first card.
+
+### Optional: pip install mode
+
+```bash
+python3 -m pip install talaria-kanban
+export TALARIA_WORK_DIR=~/my-project
+talaria-server
+```
+
+### Advanced operator mode (stable/dev topology)
+
+For teams running Talaria to build Talaria (or other self-hosted agent loops), run orchestrator from a stable clone and target a separate dev clone. See the self-hosting guardrails section below.
 
 ---
 

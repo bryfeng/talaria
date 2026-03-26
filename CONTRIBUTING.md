@@ -5,26 +5,20 @@ Thank you for your interest in contributing! Talaria is an AI-native kanban wher
 ## Quick Start
 
 ```bash
-# Clone the repo
 git clone https://github.com/bryfeng/talaria.git
 cd talaria
-
-# Set up virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install -e ".[dev]"
 
-# Install dependencies
-pip install -r requirements.txt
+# Terminal 1: API server
+TALARIA_WORK_DIR="$(pwd)" talaria-server
 
-# Install dev dependencies
-pip install pytest ruff
-
-# Start the board server
-python server.py
-
-# In a separate terminal, start the agent watcher
+# Terminal 2: watcher
 python agent_watcher.py
 ```
+
+Open http://localhost:8400 and create/move cards via UI, CLI, or API.
 
 ## Running Tests
 
@@ -47,15 +41,16 @@ Cards move through these stages:
 Backlog → Spec → Groom → Ready → In Progress → Review → Done
 ```
 
-- **Backlog**: Ideas and TODOs. Anyone can create cards here.
-- **Spec**: A CLAUDE CODE agent writes a detailed SPEC.md for the card.
-- **Groom**: The spec is reviewed. If it looks good, it moves forward.
-- **Ready**: The card is queued and ready for implementation.
-- **In Progress**: A CLAUDE CODE agent implements the feature. A git worktree is created for isolation.
-- **Review**: Tests run automatically. On pass, the card advances to Done.
-- **Done**: Work is merged, worktree is cleaned up.
+- **Backlog**: intake queue. Can auto-advance on rule pass.
+- **Spec**: agent-spawn stage for planning/spec output.
+- **Groom**: agent-spawn stage for refinement and readiness checks.
+- **Ready**: staging queue; can auto-advance on rule pass.
+- **In Progress**: implementation agent stage in isolated git worktree.
+- **Review**: checks/test gate; transitions by policy (`on_checks_pass`, `on_fail`).
+- **Done**: capped operational history (20); overflow auto-archives.
 
-**Don't edit `board.json` directly** — use the CLI or API to move cards:
+Talaria supports config-driven transitions via `board.json` per-column `auto_transition` rules.
+Use CLI/API for card moves unless you are intentionally editing transition policy.
 
 ```bash
 talaria list
@@ -92,7 +87,7 @@ Before marking a card Done, ensure:
 
 ## How Agents Work
 
-When a card enters Spec, Groom, or In Progress, the `agent_watcher.py` polls the board and spawns a CLAUDE CODE agent. The agent:
+When a card enters an `agent_spawn` column (commonly Spec, Groom, or In Progress), `agent_watcher.py` polls the board and spawns the configured worker (Hermes / Claude Code / Codex). The agent:
 
 1. Reads the card spec (`cards/<id>.md`)
 2. Reads context guides for the current stage (`guides/talaria.md`, `guides/spec-guide.md`, etc.)
@@ -101,6 +96,15 @@ When a card enters Spec, Groom, or In Progress, the `agent_watcher.py` polls the
 5. Advances the card to the next column
 
 You can monitor active agents via the Talaria web UI (pulsing orange dot on cards) or by checking `logs/talaria.log`.
+
+## Optional advanced operator topology
+
+Most contributors should use the single-repo quick start above.
+If you are operating Talaria in self-hosted production mode, use runner/target separation:
+- runner (stable clone) executes server + watcher
+- target (dev clone) receives agent mutations
+
+This is enforced by Talaria self-hosting guardrails unless `TALARIA_BYPASS_ALLOWED=true`.
 
 ## Getting Help
 
