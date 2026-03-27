@@ -1,0 +1,1895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Talaria</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --card: #21262d;
+      --card-hover: #2d333b;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-dim: #1f6feb;
+      --col-backlog: #6e7681;
+      --col-spec: #58a6ff;
+      --col-groom: #d29922;
+      --col-ready: #3fb950;
+      --col-inprogress: #d29922;
+      --col-review: #a371f7;
+      --col-done: #3fb950;
+      --priority-low: #6e7681;
+      --priority-medium: #d29922;
+      --priority-high: #f85149;
+      --priority-critical: #ff7b72;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+
+    .board-name {
+      font-size: 14px;
+      color: var(--text-muted);
+      padding: 3px 10px;
+      background: var(--card);
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: var(--card-hover); }
+    .btn-primary {
+      background: var(--accent-dim);
+      border-color: var(--accent-dim);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent); }
+
+    /* ── Board ── */
+    .board {
+      display: flex;
+      gap: 12px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      flex: 1;
+      align-items: flex-start;
+    }
+
+    .column {
+      flex: 0 0 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 200px;
+    }
+
+    .col-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border: 2px solid;
+      cursor: grab;
+    }
+
+    .col-header[data-col="backlog"]    { border-color: var(--col-backlog);    background: rgba(110,118,129,0.1); color: var(--col-backlog); }
+    .col-header[data-col="spec"]      { border-color: var(--col-spec);      background: rgba(88,166,255,0.1);  color: var(--col-spec); }
+    .col-header[data-col="groom"]     { border-color: var(--col-groom);     background: rgba(210,153,34,0.1);  color: var(--col-groom); }
+    .col-header[data-col="ready"]     { border-color: var(--col-ready);     background: rgba(63,185,80,0.1);   color: var(--col-ready); }
+    .col-header[data-col="in_progress"]{ border-color: var(--col-inprogress);background: rgba(210,153,34,0.1); color: var(--col-inprogress); }
+    .col-header[data-col="review"]    { border-color: var(--col-review);    background: rgba(163,113,247,0.1); color: var(--col-review); }
+    .col-header[data-col="done"]      { border-color: var(--col-done);      background: rgba(63,185,80,0.1);   color: var(--col-done); }
+
+    .col-count {
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 11px;
+    }
+
+    .col-settings-btn {
+      background: none;
+      border: none;
+      color: inherit;
+      opacity: 0.5;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+      transition: opacity 0.15s;
+    }
+    .col-settings-btn:hover { opacity: 1; }
+    .col-webhook-dot {
+      font-size: 10px;
+      opacity: 0.8;
+      vertical-align: middle;
+    }
+
+    .col-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 60px;
+      padding: 4px;
+      border-radius: 6px;
+      border: 1px dashed transparent;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .col-cards.drag-over {
+      border-color: var(--accent);
+      background: rgba(88,166,255,0.05);
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      cursor: grab;
+      transition: box-shadow 0.15s, transform 0.1s;
+      user-select: none;
+    }
+    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .card.dragging { opacity: 0.4; transform: rotate(2deg); }
+    .card.card-running {
+      border-left: 3px solid var(--col-inprogress);
+    }
+    .runner-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--col-inprogress);
+      animation: runner-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes runner-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.4;
+      flex: 1;
+    }
+
+    .card-id {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: monospace;
+      white-space: nowrap;
+    }
+
+    .card-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      margin-bottom: 8px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .card-labels {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .label {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.08);
+      color: var(--text-muted);
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .priority-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .priority-dot[data-p="low"]      { background: var(--priority-low); }
+    .priority-dot[data-p="medium"]   { background: var(--priority-medium); }
+    .priority-dot[data-p="high"]     { background: var(--priority-high); }
+    .priority-dot[data-p="critical"] { background: var(--priority-critical); }
+
+    .assignee-chip {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: rgba(88,166,255,0.15);
+      color: var(--accent);
+    }
+
+    /* ── Add card form ── */
+    .add-card-area {
+      padding: 4px;
+    }
+
+    .add-card-btn {
+      width: 100%;
+      padding: 8px;
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .add-card-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(88,166,255,0.05);
+    }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 480px;
+      max-width: 95vw;
+      padding: 20px;
+    }
+
+    .modal h2 {
+      font-size: 16px;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .form-row {
+      display: flex;
+      gap: 12px;
+    }
+    .form-row .form-group { flex: 1; }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    /* ── Card detail modal ── */
+    .detail-modal .modal { width: 560px; max-height: 85vh; overflow-y: auto; }
+
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .detail-title {
+      font-size: 18px;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .detail-id {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: monospace;
+      margin-top: 4px;
+    }
+
+    .close-btn {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .close-btn:hover { color: var(--text); }
+
+    .detail-body {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .detail-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .detail-meta {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .detail-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .detail-field label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .detail-field select {
+      padding: 5px 8px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .notes-section h4 {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .note {
+      background: var(--card);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
+    .note-meta {
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .note-form {
+      display: flex;
+      gap: 6px;
+    }
+
+    .note-form input {
+      flex: 1;
+      padding: 6px 8px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .note-form input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .note-form button {
+      padding: 6px 12px;
+      background: var(--accent-dim);
+      border: none;
+      border-radius: 5px;
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* ── Activity log ── */
+    .activity-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 50;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .activity-btn:hover { color: var(--text); border-color: var(--accent); }
+
+    .activity-panel {
+      display: none;
+      position: fixed;
+      bottom: 74px;
+      right: 20px;
+      width: 360px;
+      max-height: 400px;
+      overflow-y: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      z-index: 50;
+      padding: 12px;
+    }
+    .activity-panel.open { display: block; }
+
+    .activity-entry {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .activity-entry:last-child { border-bottom: none; }
+
+    .activity-ts {
+      color: var(--text-muted);
+      font-size: 10px;
+      margin-bottom: 2px;
+    }
+
+    .activity-text { color: var(--text); }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
+      color: var(--text);
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Delete card ── */
+    .card-actions {
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .card:hover .card-actions { opacity: 1; }
+
+    .card-action-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 11px;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    .card-action-btn:hover { color: var(--text); background: rgba(255,255,255,0.1); }
+    .card-action-btn.delete:hover { color: var(--col-blocked); }
+
+    /* ── Cost ── */
+    .card-cost {
+      font-size: 10px;
+      color: #3fb950;
+      font-family: monospace;
+    }
+
+    .cost-badge {
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 3px 10px;
+      background: var(--card);
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    .cost-section h4 {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .cost-total {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .cost-entry {
+      background: var(--card);
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cost-entry-agent {
+      color: var(--accent);
+      font-weight: 500;
+      flex: 0 0 auto;
+    }
+
+    .cost-entry-tokens {
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .cost-entry-amount {
+      color: var(--text);
+      font-family: monospace;
+      white-space: nowrap;
+    }
+
+    .cost-entry-ts {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    /* ── Repo filter bar ── */
+    .repo-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      overflow-x: auto;
+    }
+
+    .repo-bar-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .repo-chip {
+      padding: 3px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text-muted);
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .repo-chip:hover { border-color: var(--accent); color: var(--text); }
+    .repo-chip.active {
+      border-color: var(--accent);
+      background: rgba(88,166,255,0.15);
+      color: var(--accent);
+    }
+
+    /* ── Repo badge on cards ── */
+    .repo-badge {
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(88,166,255,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(88,166,255,0.25);
+      font-family: monospace;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .column { flex: 0 0 260px; }
+      .board { padding: 12px; gap: 8px; }
+    }
+
+    /* ── Architecture Viewer ── */
+    .arch-modal .modal {
+      width: 920px;
+      max-width: 96vw;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .arch-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .arch-tabs {
+      display: flex;
+      gap: 4px;
+    }
+
+    .arch-tab {
+      padding: 5px 14px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .arch-tab:hover { color: var(--text); background: var(--card); }
+    .arch-tab.active {
+      border-color: var(--border);
+      background: var(--card);
+      color: var(--text);
+    }
+
+    .arch-modal-body {
+      overflow-y: auto;
+      flex: 1;
+      padding: 20px;
+    }
+
+    .arch-docs-content {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+    .arch-docs-content h1, .arch-docs-content h2, .arch-docs-content h3,
+    .arch-docs-content h4, .arch-docs-content h5, .arch-docs-content h6 {
+      color: var(--text);
+      margin: 1.4em 0 0.5em;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .arch-docs-content h1 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+    .arch-docs-content h2 { font-size: 1.25em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+    .arch-docs-content h3 { font-size: 1.1em; }
+    .arch-docs-content p { margin: 0.7em 0; }
+    .arch-docs-content code {
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 0.85em;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.15em 0.4em;
+    }
+    .arch-docs-content pre {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 16px;
+      overflow-x: auto;
+      margin: 0.8em 0;
+    }
+    .arch-docs-content pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 12px;
+    }
+    .arch-docs-content ul, .arch-docs-content ol { padding-left: 1.6em; margin: 0.5em 0; }
+    .arch-docs-content li { margin: 0.25em 0; }
+    .arch-docs-content blockquote {
+      border-left: 3px solid var(--border);
+      margin: 0.8em 0;
+      padding: 0.2em 1em;
+      color: var(--text-muted);
+    }
+    .arch-docs-content hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+    .arch-docs-content strong { font-weight: 600; color: var(--text); }
+    .arch-docs-content em { font-style: italic; }
+    .arch-docs-content a { color: var(--accent); text-decoration: none; }
+    .arch-docs-content a:hover { text-decoration: underline; }
+
+    .arch-svg-box { cursor: default; transition: opacity 0.1s; }
+    .arch-svg-box:hover { opacity: 0.85; }
+
+    .arch-refresh-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .arch-refresh-btn:hover { color: var(--text); background: var(--card); }
+
+    .arch-diagram-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 0 8px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 10px;
+    }
+    .arch-zoom-btn {
+      padding: 3px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+    }
+    .arch-zoom-btn:hover { background: var(--card-hover); }
+    .arch-zoom-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      min-width: 38px;
+      text-align: center;
+    }
+    .arch-updated {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .arch-auto-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 10px;
+      background: rgba(63,185,80,0.15);
+      color: var(--col-done);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    #arch-svg-container svg { transition: transform 0.15s; transform-origin: top center; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="header-left">
+    <span class="logo">👟 Talaria</span>
+    <span class="board-name" id="board-name">talaria</span>
+  </div>
+  <div class="header-right">
+    <span class="cost-badge" id="board-cost" title="Total cost across all cards">$0.00</span>
+    <button class="btn" onclick="openArchModal()">📐 Architecture</button>
+    <button class="btn btn-primary" onclick="openCreateModal()">+ New Card</button>
+  </div>
+</header>
+
+<!-- ── Repo filter bar ── -->
+<div class="repo-bar" id="repo-bar" style="display:none">
+  <span class="repo-bar-label">Repo</span>
+  <span class="repo-chip active" data-repo="" onclick="selectRepo(this, '')">All</span>
+</div>
+
+<!-- ── Board ── -->
+<div class="board" id="board"></div>
+
+<!-- ── Create/Edit Modal ── -->
+<div class="modal-overlay" id="createModal">
+  <div class="modal">
+    <h2>New Card</h2>
+    <div class="form-group">
+      <label>Title *</label>
+      <input type="text" id="f-title" placeholder="What needs to be done?" />
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="f-desc" placeholder="Details, context, links..."></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Column</label>
+        <select id="f-column"></select>
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <select id="f-priority">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Assignee</label>
+      <input type="text" id="f-assignee" placeholder="e.g. bryfeng, agent" />
+    </div>
+    <div class="form-group">
+      <label>Labels (comma-separated)</label>
+      <input type="text" id="f-labels" placeholder="frontend, backend, bug, feature" />
+    </div>
+    <div class="form-group">
+      <label>Repo</label>
+      <select id="f-repo"><option value="">— none —</option></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeCreateModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitCard()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Card Detail Modal ── -->
+<div class="modal-overlay detail-modal" id="detailModal">
+  <div class="modal">
+    <div class="detail-header">
+      <div>
+        <div class="detail-title" id="detail-title">Card Title</div>
+        <div class="detail-id" id="detail-id"></div>
+      </div>
+      <button class="close-btn" onclick="closeDetailModal()">✕</button>
+    </div>
+    <div id="arch-docs-btn" style="display:none; margin: 0 16px 12px;">
+      <a href="docs/architecture.md" target="_blank" style="
+        display:inline-flex; align-items:center; gap:6px;
+        padding: 6px 14px; border-radius:6px;
+        background:#1971c2; color:#fff;
+        text-decoration:none; font-size:13px; font-weight:500;
+      ">📐 Architecture Docs</a>
+    </div>
+    <div class="detail-body">
+      <div class="detail-desc" id="detail-desc"></div>
+      <div class="detail-meta">
+        <div class="detail-field">
+          <label>Column</label>
+          <select id="detail-column" onchange="moveCard()"></select>
+        </div>
+        <div class="detail-field">
+          <label>Priority</label>
+          <select id="detail-priority" onchange="updateCardField('priority')">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+        </div>
+        <div class="detail-field">
+          <label>Assignee</label>
+          <input type="text" id="detail-assignee" placeholder="assignee" onchange="updateCardField('assignee')" />
+        </div>
+        <div class="detail-field">
+          <label>Repo</label>
+          <select id="detail-repo" onchange="updateCardField('repo')">
+            <option value="">— none —</option>
+          </select>
+        </div>
+      </div>
+      <div class="cost-section" id="detail-tests-section" style="display:none">
+        <h4>CI Tests</h4>
+        <div id="detail-tests"></div>
+      </div>
+      <div class="cost-section" id="detail-cost-section">
+        <h4>Cost</h4>
+        <div class="cost-total" id="detail-cost-total">$0.00 · 0 tokens</div>
+        <div id="detail-cost-log"></div>
+      </div>
+      <div class="notes-section">
+        <h4>Notes</h4>
+        <div id="detail-notes"></div>
+        <div class="note-form">
+          <input type="text" id="note-input" placeholder="Add a note..." onkeydown="if(event.key==='Enter')addNote()" />
+          <button onclick="addNote()">Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Architecture Modal ── -->
+<div class="modal-overlay arch-modal" id="archModal">
+  <div class="modal">
+    <div class="arch-modal-header">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span style="font-size:16px;font-weight:600;color:var(--text)">Architecture</span>
+        <div class="arch-tabs">
+          <button class="arch-tab active" id="arch-tab-diagram" onclick="switchArchTab('diagram')">Diagram</button>
+          <button class="arch-tab" id="arch-tab-docs" onclick="switchArchTab('docs')">Docs</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="arch-updated-time" class="arch-updated" title="Last modified time of architecture files"></span>
+        <button class="arch-refresh-btn" onclick="refreshArch()" title="Reload diagram and docs">↻ Refresh</button>
+        <button class="close-btn" onclick="closeArchModal()">✕</button>
+      </div>
+    </div>
+    <div class="arch-modal-body">
+      <div id="arch-diagram-view">
+        <div class="arch-diagram-toolbar">
+          <button class="arch-zoom-btn" onclick="adjustZoom(-0.2)" title="Zoom out">−</button>
+          <span class="arch-zoom-label" id="arch-zoom-pct">100%</span>
+          <button class="arch-zoom-btn" onclick="adjustZoom(0.2)" title="Zoom in">+</button>
+          <button class="arch-zoom-btn" onclick="resetZoom()" title="Reset zoom" style="font-size:11px;padding:3px 8px">Reset</button>
+          <span id="arch-auto-badge" class="arch-auto-badge" style="display:none">auto-refresh</span>
+        </div>
+        <div id="arch-svg-container" style="min-height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+          <span style="color:var(--text-muted)">Loading diagram…</span>
+        </div>
+      </div>
+      <div id="arch-docs-view" style="display:none">
+        <div class="arch-docs-content" id="arch-docs-content"><span style="color:var(--text-muted)">Loading docs…</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Column Settings Modal ── -->
+<div class="modal-overlay" id="colSettingsModal">
+  <div class="modal">
+    <h2>Column Settings: <span id="col-settings-name" style="color:var(--accent)"></span></h2>
+    <div class="form-group">
+      <label>Webhook URL</label>
+      <input type="url" id="col-webhook-url" placeholder="https://hooks.slack.com/... or any POST endpoint" />
+    </div>
+    <div class="form-group">
+      <label>Webhook Headers (JSON)</label>
+      <textarea id="col-webhook-headers" placeholder='{"Authorization": "Bearer token", "X-Custom": "value"}'></textarea>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+      When a card moves into this column, Talaria will POST a <code style="background:var(--card);padding:1px 4px;border-radius:3px">card.moved</code> event to the URL above.
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeColumnSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveColumnSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Activity Log ── -->
+<button class="activity-btn" onclick="toggleActivity()">⚡</button>
+<div class="activity-panel" id="activityPanel"></div>
+
+<!-- ── Toast ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = "/api";
+
+// ── State ──
+let board = { columns: [], cards: [] };
+let repos = [];
+let selectedRepo = "";  // "" = all repos
+let currentCardId = null;
+
+// ── Board polling (real-time updates) ──
+async function loadBoard() {
+  const data = await fetchJSON("/api/board").catch(() => null);
+  if (!data) return;
+  board = data;
+  renderBoard();
+  loadActivity();
+}
+
+// ── Init ──
+async function init() {
+  const [data, repoData] = await Promise.all([
+    fetchJSON("/api/board"),
+    fetchJSON("/api/repos").catch(() => []),
+  ]);
+  board = data;
+  repos = repoData;
+  renderRepoBar();
+  renderBoard();
+  loadActivity();
+  setInterval(loadBoard, 10000);  // real-time board + activity updates
+  setInterval(loadActivity, 30000);
+}
+
+// ── Fetch ──
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function api(method, path, body) {
+  return fetchJSON(API + path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+// ── Cost helpers ──
+function boardCostTotals() {
+  let tokens = 0, cost = 0;
+  board.cards.forEach(c => (c.cost_log || []).forEach(e => {
+    tokens += (e.tokens || 0);
+    cost += (e.cost_usd || 0);
+  }));
+  return { tokens, cost };
+}
+
+function updateBoardCost() {
+  const { tokens, cost } = boardCostTotals();
+  const el = document.getElementById("board-cost");
+  if (el) el.textContent = `$${cost.toFixed(4)} · ${tokens.toLocaleString()} tok`;
+  el.title = `Total cost across all cards: $${cost.toFixed(6)}, ${tokens.toLocaleString()} tokens`;
+}
+
+// ── Repo bar ──
+function renderRepoBar() {
+  const bar = document.getElementById("repo-bar");
+  if (!repos || repos.length === 0) {
+    bar.style.display = "none";
+    return;
+  }
+  bar.style.display = "flex";
+
+  // Build chips: All + one per repo
+  const allChip = `<span class="repo-chip${selectedRepo === "" ? " active" : ""}" data-repo="" onclick="selectRepo(this, '')">All</span>`;
+  const repoChips = repos.map(r =>
+    `<span class="repo-chip${selectedRepo === r.name ? " active" : ""}" data-repo="${escapeHtml(r.name)}" onclick="selectRepo(this, '${escapeHtml(r.name)}')">${escapeHtml(r.name)}</span>`
+  ).join("");
+  bar.innerHTML = `<span class="repo-bar-label">Repo</span>${allChip}${repoChips}`;
+}
+
+function selectRepo(chipEl, repoName) {
+  selectedRepo = repoName;
+  document.querySelectorAll(".repo-chip").forEach(c => c.classList.toggle("active", c.dataset.repo === repoName));
+  renderBoard();
+}
+
+function _repoOptions(selectedVal) {
+  const none = `<option value=""${!selectedVal ? " selected" : ""}>— none —</option>`;
+  const opts = repos.map(r =>
+    `<option value="${escapeHtml(r.name)}"${r.name === selectedVal ? " selected" : ""}>${escapeHtml(r.name)}</option>`
+  ).join("");
+  return none + opts;
+}
+
+// ── Render ──
+function renderBoard() {
+  const boardEl = document.getElementById("board");
+  boardEl.innerHTML = "";
+
+  const visibleCards = selectedRepo
+    ? board.cards.filter(c => c.repo === selectedRepo)
+    : board.cards;
+
+  board.columns.forEach(col => {
+    const colEl = document.createElement("div");
+    colEl.className = "column";
+    colEl.dataset.colId = col.id;
+
+    const colCount = visibleCards.filter(c => c.column === col.id).length;
+    colEl.innerHTML = `
+      <div class="col-header" data-col="${col.id}" draggable="true"
+           ondragstart="onColDragStart(event)" ondragend="onDragEnd(event)">
+        <span>${col.name}${col.webhook_url ? ' <span class="col-webhook-dot" title="Webhook configured: ' + escapeHtml(col.webhook_url) + '">⚡</span>' : ''}</span>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span class="col-count">${colCount}</span>
+          <button class="col-settings-btn" onclick="event.stopPropagation();openColumnSettings('${col.id}')" title="Column settings">⚙</button>
+        </div>
+      </div>
+      <div class="col-cards" id="cards-${col.id}"
+           ondragover="onDragOver(event)" ondragleave="onDragLeave(event)"
+           ondrop="onDrop(event)">
+      </div>
+      <div class="add-card-area">
+        <button class="add-card-btn" onclick="openCreateModal('${col.id}')">+ Add card</button>
+      </div>
+    `;
+    boardEl.appendChild(colEl);
+  });
+
+  // Render cards after columns are in DOM
+  visibleCards.forEach(card => renderCard(card));
+  updateBoardCost();
+}
+
+function renderCard(card) {
+  const container = document.getElementById("cards-" + card.column);
+  if (!container) return;
+
+  const el = document.createElement("div");
+  el.className = "card";
+  el.id = "card-" + card.id;
+  el.draggable = true;
+  el.dataset.cardId = card.id;
+  el.dataset.fromCol = card.column;
+
+  el.ondragstart = (e) => onCardDragStart(e, card);
+  el.ondragend = onDragEnd;
+  el.onclick = (e) => { if (!el.classList.contains("dragging")) openDetailModal(card.id); };
+
+  const labels = (card.labels || []).map(l => `<span class="label">${l}</span>`).join("");
+
+  el.innerHTML = `
+    <div class="card-top">
+      <div class="card-title">${escapeHtml(card.title)}</div>
+      <div class="card-actions">
+        <button class="card-action-btn delete" onclick="event.stopPropagation(); deleteCard('${card.id}')" title="Delete">✕</button>
+      </div>
+    </div>
+    ${card.description ? `<div class="card-desc">${escapeHtml(card.description)}</div>` : ""}
+    <div class="card-footer">
+      <div class="card-labels">
+        ${card.repo ? `<span class="repo-badge">${escapeHtml(card.repo)}</span>` : ""}
+        ${labels}
+      </div>
+      <div class="card-meta">
+        ${card.agent_session_id ? `<span class="runner-dot" title="Agent running (PID ${card.agent_session_id})"></span>` : ""}
+        <div class="priority-dot" data-p="${card.priority || 'medium'}"></div>
+        ${card.assignee ? `<span class="assignee-chip">${escapeHtml(card.assignee)}</span>` : ""}
+        ${(card.cost_log && card.cost_log.length) ? `<span class="card-cost" title="Agent cost">$${card.cost_log.reduce((s,e)=>s+(e.cost_usd||0),0).toFixed(4)}</span>` : ""}
+        <span class="card-id">#${card.id}</span>
+      </div>
+    </div>
+  `;
+
+  // Add running class if agent is active
+  if (card.agent_session_id) {
+    el.classList.add("card-running");
+  }
+
+  // Remove existing card with same id if re-rendering
+  const existing = document.getElementById("card-" + card.id);
+  if (existing) existing.remove();
+  container.appendChild(el);
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ── Drag & Drop ──
+let draggedCard = null;
+let draggedFromCol = null;
+
+function onCardDragStart(e, card) {
+  draggedCard = card;
+  draggedFromCol = card.column;
+  e.dataTransfer.effectAllowed = "move";
+  e.target.classList.add("dragging");
+}
+
+function onColDragStart(e) {
+  // Column header drag = drag all cards from that column
+  e.dataTransfer.effectAllowed = "move";
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add("drag-over");
+}
+
+function onDragLeave(e) {
+  e.currentTarget.classList.remove("drag-over");
+}
+
+async function onDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove("drag-over");
+  const toColId = e.currentTarget.id.replace("cards-", "");
+  if (!draggedCard || draggedFromCol === toColId) return;
+
+  // Optimistic UI update
+  draggedCard.column = toColId;
+  renderCard(draggedCard);
+
+  // Persist
+  try {
+    await api("PATCH", `/card/${draggedCard.id}`, { column: toColId });
+    showToast("Card moved");
+    loadActivity();
+  } catch (err) {
+    showToast("Failed to move card: " + err.message);
+    // Revert
+    draggedCard.column = draggedFromCol;
+    renderCard(draggedCard);
+  }
+  draggedCard = null;
+  draggedFromCol = null;
+}
+
+function onDragEnd(e) {
+  document.querySelectorAll(".card.dragging").forEach(el => el.classList.remove("dragging"));
+  document.querySelectorAll(".col-cards.drag-over").forEach(el => el.classList.remove("drag-over"));
+}
+
+// ── Create Card ──
+function openCreateModal(colId) {
+  currentCardId = null;
+  document.getElementById("createModal").classList.add("open");
+  document.getElementById("f-title").value = "";
+  document.getElementById("f-desc").value = "";
+  document.getElementById("f-labels").value = "";
+  document.getElementById("f-assignee").value = "";
+
+  // Populate columns dropdown
+  const sel = document.getElementById("f-column");
+  sel.innerHTML = board.columns.map(c =>
+    `<option value="${c.id}" ${c.id === colId ? "selected" : ""}>${c.name}</option>`
+  ).join("");
+
+  // Populate repo dropdown (pre-select current filter if any)
+  document.getElementById("f-repo").innerHTML = _repoOptions(selectedRepo);
+
+  document.getElementById("f-title").focus();
+}
+
+function closeCreateModal() {
+  document.getElementById("createModal").classList.remove("open");
+}
+
+async function submitCard() {
+  const title = document.getElementById("f-title").value.trim();
+  if (!title) { showToast("Title is required"); return; }
+
+  const card = await api("POST", "/card", {
+    title,
+    description: document.getElementById("f-desc").value.trim(),
+    column: document.getElementById("f-column").value,
+    priority: document.getElementById("f-priority").value,
+    assignee: document.getElementById("f-assignee").value.trim(),
+    labels: document.getElementById("f-labels").value.split(",").map(s => s.trim()).filter(Boolean),
+    repo: document.getElementById("f-repo").value || null,
+  });
+
+  board.cards.push(card);
+  renderCard(card);
+  updateColCounts();
+  closeCreateModal();
+  showToast("Card created");
+  loadActivity();
+}
+
+// ── Card Detail ──
+async function openDetailModal(cardId) {
+  currentCardId = cardId;
+  const card = board.cards.find(c => c.id === cardId);
+  if (!card) return;
+
+  document.getElementById("detail-title").textContent = card.title;
+  document.getElementById("detail-id").textContent = "#" + card.id;
+  // Show Architecture Docs button for the architecture card
+  document.getElementById("arch-docs-btn").style.display =
+    (card.labels && card.labels.includes("docs")) ? "block" : "none";
+  document.getElementById("detail-desc").textContent = card.description || "No description";
+  document.getElementById("detail-priority").value = card.priority || "medium";
+  document.getElementById("detail-assignee").value = card.assignee || "";
+
+  const colSel = document.getElementById("detail-column");
+  colSel.innerHTML = board.columns.map(c =>
+    `<option value="${c.id}" ${c.id === card.column ? "selected" : ""}>${c.name}</option>`
+  ).join("");
+
+  document.getElementById("detail-repo").innerHTML = _repoOptions(card.repo || "");
+
+  // Tests
+  const testsSection = document.getElementById("detail-tests-section");
+  const testsEl = document.getElementById("detail-tests");
+  if (card.tests && card.tests.command) {
+    testsSection.style.display = "";
+    testsEl.innerHTML = `
+      <div class="cost-entry">
+        <span class="cost-entry-agent">command</span>
+        <span style="color:var(--text);font-size:12px;flex:1">${escapeHtml(card.tests.command)}</span>
+      </div>
+      <div class="cost-entry">
+        <span class="cost-entry-agent">pass_if</span>
+        <span style="color:var(--text-muted);font-size:12px">${escapeHtml(card.tests.pass_if || "exit_0")}</span>
+      </div>`;
+  } else {
+    testsSection.style.display = "none";
+  }
+
+  // Cost
+  const costLog = card.cost_log || [];
+  let totalTokens = 0, totalCost = 0;
+  costLog.forEach(e => { totalTokens += (e.tokens || 0); totalCost += (e.cost_usd || 0); });
+  document.getElementById("detail-cost-total").textContent =
+    `$${totalCost.toFixed(4)} · ${totalTokens.toLocaleString()} tokens`;
+  const costLogEl = document.getElementById("detail-cost-log");
+  costLogEl.innerHTML = costLog.length
+    ? costLog.map(e => `
+        <div class="cost-entry">
+          <span class="cost-entry-agent">${escapeHtml(e.agent || "?")}</span>
+          <span class="cost-entry-tokens">${(e.tokens || 0).toLocaleString()} tok</span>
+          <span class="cost-entry-amount">$${(e.cost_usd || 0).toFixed(4)}</span>
+          <span class="cost-entry-ts">${new Date(e.ts).toLocaleString()}</span>
+        </div>`).join("")
+    : "<div style='color:var(--text-muted);font-size:12px'>No cost recorded yet</div>";
+
+  // Notes
+  const notesEl = document.getElementById("detail-notes");
+  const notes = card.status_notes || [];
+  notesEl.innerHTML = notes.length
+    ? notes.map(n => `
+        <div class="note">
+          <div class="note-meta">${n.author} · ${new Date(n.ts).toLocaleString()}</div>
+          <div>${escapeHtml(n.text)}</div>
+        </div>`).join("")
+    : "<div style='color:var(--text-muted);font-size:12px'>No notes yet</div>";
+
+  document.getElementById("detailModal").classList.add("open");
+}
+
+function closeDetailModal() {
+  document.getElementById("detailModal").classList.remove("open");
+  currentCardId = null;
+}
+
+async function moveCard() {
+  if (!currentCardId) return;
+  const colId = document.getElementById("detail-column").value;
+  const card = board.cards.find(c => c.id === currentCardId);
+  if (!card || card.column === colId) return;
+
+  card.column = colId;
+  renderCard(card);
+  updateColCounts();
+
+  try {
+    await api("PATCH", `/card/${currentCardId}`, { column: colId });
+    showToast("Card moved");
+    loadActivity();
+  } catch (err) {
+    showToast("Failed: " + err.message);
+  }
+}
+
+async function updateCardField(field) {
+  if (!currentCardId) return;
+  const value = document.getElementById("detail-" + field).value;
+  await api("PATCH", `/card/${currentCardId}`, { [field]: value });
+}
+
+async function addNote() {
+  if (!currentCardId) return;
+  const input = document.getElementById("note-input");
+  const text = input.value.trim();
+  if (!text) return;
+
+  await api("POST", `/card/${currentCardId}/note`, { text, author: "bryfeng" });
+  input.value = "";
+  openDetailModal(currentCardId); // refresh
+  loadActivity();
+}
+
+async function deleteCard(cardId) {
+  const card = board.cards.find(c => c.id === cardId);
+  if (!card) return;
+  if (card.column !== "backlog") {
+    showToast("Can only delete cards in Backlog");
+    return;
+  }
+  if (!confirm("Delete this card?")) return;
+  await api("DELETE", `/card/${cardId}`);
+  const el = document.getElementById("card-" + cardId);
+  if (el) el.remove();
+  board.cards = board.cards.filter(c => c.id !== cardId);
+  updateColCounts();
+  closeDetailModal();
+  showToast("Card deleted");
+  loadActivity();
+}
+
+function updateColCounts() {
+  const visibleCards = selectedRepo
+    ? board.cards.filter(c => c.repo === selectedRepo)
+    : board.cards;
+  board.columns.forEach(col => {
+    const el = document.querySelector(`.col-header[data-col="${col.id}"] .col-count`);
+    if (el) el.textContent = visibleCards.filter(c => c.column === col.id).length;
+  });
+}
+
+// ── Activity ──
+let activityOpen = false;
+
+async function loadActivity() {
+  try {
+    const log = await fetchJSON("/api/activity");
+    const panel = document.getElementById("activityPanel");
+    panel.innerHTML = log.length
+      ? log.map(e => `
+        <div class="activity-entry">
+          <div class="activity-ts">${new Date(e.ts).toLocaleTimeString()}</div>
+          <div class="activity-text">${e.action} ${e.card_title ? `· ${e.card_title}` : ""} ${e.to_column ? `→ ${e.to_column}` : ""}</div>
+        </div>`).join("")
+      : "<div style='color:var(--text-muted);font-size:12px'>No activity yet</div>";
+  } catch {}
+}
+
+function toggleActivity() {
+  activityOpen = !activityOpen;
+  document.getElementById("activityPanel").classList.toggle("open", activityOpen);
+}
+
+// ── Toast ──
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2000);
+}
+
+// ── Architecture Viewer ──
+let archTabActive = 'diagram';
+let archZoom = 1.0;
+let archAutoRefreshTimer = null;
+let archLastMtime = null;
+
+async function openArchModal() {
+  document.getElementById("archModal").classList.add("open");
+  if (archTabActive === 'diagram') loadArchDiagram();
+  else loadArchDocs();
+  startArchAutoRefresh();
+}
+
+function closeArchModal() {
+  document.getElementById("archModal").classList.remove("open");
+  stopArchAutoRefresh();
+}
+
+function refreshArch() {
+  if (archTabActive === 'diagram') loadArchDiagram();
+  else loadArchDocs();
+}
+
+function switchArchTab(tab) {
+  archTabActive = tab;
+  document.getElementById("arch-diagram-view").style.display = tab === 'diagram' ? '' : 'none';
+  document.getElementById("arch-docs-view").style.display = tab === 'docs' ? '' : 'none';
+  document.getElementById("arch-tab-diagram").classList.toggle("active", tab === 'diagram');
+  document.getElementById("arch-tab-docs").classList.toggle("active", tab === 'docs');
+  if (tab === 'diagram') loadArchDiagram();
+  else loadArchDocs();
+}
+
+function adjustZoom(delta) {
+  archZoom = Math.max(0.4, Math.min(3.0, archZoom + delta));
+  applyArchZoom();
+}
+
+function resetZoom() {
+  archZoom = 1.0;
+  applyArchZoom();
+}
+
+function applyArchZoom() {
+  document.getElementById("arch-zoom-pct").textContent = Math.round(archZoom * 100) + '%';
+  const svg = document.querySelector('#arch-svg-container svg');
+  if (svg) svg.style.transform = `scale(${archZoom})`;
+}
+
+async function startArchAutoRefresh() {
+  stopArchAutoRefresh();
+  // Fetch initial mtime baseline
+  try {
+    const meta = await fetch('/api/arch/meta').then(r => r.json());
+    archLastMtime = _archMtimeKey(meta);
+    _updateArchUpdatedTime(meta);
+  } catch { archLastMtime = null; }
+  document.getElementById("arch-auto-badge").style.display = '';
+  archAutoRefreshTimer = setInterval(async () => {
+    try {
+      const meta = await fetch('/api/arch/meta').then(r => r.json());
+      const key = _archMtimeKey(meta);
+      if (archLastMtime && key !== archLastMtime) {
+        archLastMtime = key;
+        _updateArchUpdatedTime(meta);
+        refreshArch();
+        showToast('Architecture updated');
+      } else if (!archLastMtime) {
+        archLastMtime = key;
+      }
+    } catch { /* ignore */ }
+  }, 8000);
+}
+
+function stopArchAutoRefresh() {
+  if (archAutoRefreshTimer) { clearInterval(archAutoRefreshTimer); archAutoRefreshTimer = null; }
+  document.getElementById("arch-auto-badge").style.display = 'none';
+}
+
+function _archMtimeKey(meta) {
+  return Object.values(meta).map(v => v.mtime || 0).join(',');
+}
+
+function _updateArchUpdatedTime(meta) {
+  const mds = meta['architecture.md'];
+  if (!mds || !mds.mtime) return;
+  const d = new Date(mds.mtime * 1000);
+  const rel = _relTime(d);
+  document.getElementById("arch-updated-time").textContent = 'Updated ' + rel;
+}
+
+function _relTime(d) {
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+
+async function loadArchDiagram() {
+  document.getElementById("arch-svg-container").innerHTML =
+    '<span style="color:var(--text-muted)">Loading diagram…</span>';
+  try {
+    const data = await fetch('/docs/architecture.excalidraw.json').then(r => r.json());
+    document.getElementById("arch-svg-container").innerHTML = renderExcalidrawSVG(data.elements || []);
+    applyArchZoom();
+  } catch {
+    document.getElementById("arch-svg-container").innerHTML =
+      '<span style="color:var(--text-muted)">Failed to load diagram</span>';
+  }
+}
+
+async function loadArchDocs() {
+  document.getElementById("arch-docs-content").innerHTML =
+    '<span style="color:var(--text-muted)">Loading docs…</span>';
+  try {
+    const text = await fetch('/docs/architecture.md').then(r => r.text());
+    document.getElementById("arch-docs-content").innerHTML = markdownToHTML(text);
+  } catch {
+    document.getElementById("arch-docs-content").innerHTML =
+      '<span style="color:var(--text-muted)">Failed to load docs</span>';
+  }
+}
+
+// Lightweight markdown-to-HTML renderer
+function markdownToHTML(md) {
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const lines = md.split('\n');
+  const out = [];
+  let inCode = false, codeLang = '', codeBuf = [];
+  let inList = null; // 'ul' or 'ol'
+
+  function flushList() {
+    if (inList) { out.push(`</${inList}>`); inList = null; }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Fenced code block
+    if (/^```/.test(line)) {
+      if (!inCode) {
+        flushList();
+        inCode = true; codeLang = line.slice(3).trim(); codeBuf = [];
+      } else {
+        out.push(`<pre><code class="language-${esc(codeLang)}">${esc(codeBuf.join('\n'))}</code></pre>`);
+        inCode = false; codeBuf = [];
+      }
+      continue;
+    }
+    if (inCode) { codeBuf.push(line); continue; }
+
+    // HR
+    if (/^---+$/.test(line.trim())) { flushList(); out.push('<hr>'); continue; }
+
+    // Headings
+    const hm = line.match(/^(#{1,6})\s+(.*)/);
+    if (hm) {
+      flushList();
+      const lvl = hm[1].length;
+      out.push(`<h${lvl}>${inlineFormat(esc(hm[2]))}</h${lvl}>`);
+      continue;
+    }
+
+    // Unordered list
+    const ulm = line.match(/^[\-\*\+]\s+(.*)/);
+    if (ulm) {
+      if (inList !== 'ul') { flushList(); out.push('<ul>'); inList = 'ul'; }
+      out.push(`<li>${inlineFormat(esc(ulm[1]))}</li>`);
+      continue;
+    }
+
+    // Ordered list
+    const olm = line.match(/^\d+\.\s+(.*)/);
+    if (olm) {
+      if (inList !== 'ol') { flushList(); out.push('<ol>'); inList = 'ol'; }
+      out.push(`<li>${inlineFormat(esc(olm[1]))}</li>`);
+      continue;
+    }
+
+    // Blockquote
+    const bqm = line.match(/^>\s?(.*)/);
+    if (bqm) {
+      flushList();
+      out.push(`<blockquote>${inlineFormat(esc(bqm[1]))}</blockquote>`);
+      continue;
+    }
+
+    // Blank line
+    if (!line.trim()) { flushList(); out.push(''); continue; }
+
+    // Paragraph
+    flushList();
+    out.push(`<p>${inlineFormat(esc(line))}</p>`);
+  }
+  flushList();
+  if (inCode && codeBuf.length) {
+    out.push(`<pre><code>${esc(codeBuf.join('\n'))}</code></pre>`);
+  }
+  return out.join('\n');
+}
+
+function inlineFormat(s) {
+  // Bold + italic, bold, italic, inline code, links
+  return s
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+
+function renderExcalidrawSVG(elements) {
+  if (!elements.length) return '<span style="color:var(--text-muted)">No diagram elements</span>';
+
+  // Compute bounding box
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  elements.forEach(el => {
+    if (el.type === 'arrow') {
+      (el.points || [[0,0],[el.width||0,el.height||0]]).forEach(([px,py]) => {
+        minX = Math.min(minX, el.x+px); minY = Math.min(minY, el.y+py);
+        maxX = Math.max(maxX, el.x+px); maxY = Math.max(maxY, el.y+py);
+      });
+    } else {
+      minX = Math.min(minX, el.x);           minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x+(el.width||0)); maxY = Math.max(maxY, el.y+(el.height||0));
+    }
+  });
+
+  const pad = 28, vw = maxX - minX + pad*2, vh = maxY - minY + pad*2;
+  const ox = -minX + pad, oy = -minY + pad;
+  const x = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const parts = [];
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vw} ${vh}" style="width:100%;height:auto;display:block;background:#f8f9fa;border-radius:8px">`);
+  parts.push(`<style>.arch-svg-box { cursor:default; transition:opacity 0.12s; } .arch-svg-box:hover { opacity:0.82; }</style>`);
+  parts.push(`<defs><marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#555"/></marker></defs>`);
+
+  // Arrows first (under boxes)
+  elements.filter(el => el.type === 'arrow').forEach(el => {
+    const pts = el.points || [[0,0],[el.width||0,el.height||0]];
+    const pStr = pts.map(([px,py]) => `${el.x+px+ox},${el.y+py+oy}`).join(' ');
+    parts.push(`<polyline points="${pStr}" fill="none" stroke="${x(el.strokeColor||'#555')}" stroke-width="${el.strokeWidth||2}" marker-end="url(#ah)"/>`);
+    if (el.text) {
+      const mx = el.x + (pts[0][0]+pts[pts.length-1][0])/2 + ox;
+      const my = el.y + (pts[0][1]+pts[pts.length-1][1])/2 + oy - 7;
+      const tw = el.text.length * 6 + 12;
+      parts.push(`<rect x="${mx-tw/2}" y="${my-13}" width="${tw}" height="16" fill="#f8f9fa" rx="3"/>`);
+      parts.push(`<text x="${mx}" y="${my}" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="11" fill="#555">${x(el.text)}</text>`);
+    }
+  });
+
+  // Boxes on top with hover class
+  elements.filter(el => el.type === 'rectangle' || el.type === 'ellipse').forEach(el => {
+    const ex = el.x+ox, ey = el.y+oy, rx = el.borderRadius||0;
+    const tooltip = el.text ? ` title="${x(el.text.replace(/\\n/g,'\n'))}"` : '';
+    parts.push(`<g class="arch-svg-box"${tooltip}>`);
+    if (el.type === 'ellipse') {
+      const cx2 = ex + el.width/2, cy2 = ey + el.height/2;
+      parts.push(`<ellipse cx="${cx2}" cy="${cy2}" rx="${el.width/2}" ry="${el.height/2}" fill="${x(el.backgroundColor||'#fff')}" stroke="${x(el.strokeColor||'#888')}" stroke-width="${el.strokeWidth||2}"/>`);
+    } else {
+      parts.push(`<rect x="${ex}" y="${ey}" width="${el.width}" height="${el.height}" rx="${rx}" ry="${rx}" fill="${x(el.backgroundColor||'#fff')}" stroke="${x(el.strokeColor||'#888')}" stroke-width="${el.strokeWidth||2}"/>`);
+    }
+    if (el.text) {
+      const lines = el.text.replace(/\\n/g, '\n').split('\n');
+      const fs = el.fontSize || 14, lh = fs * 1.35;
+      const totalH = lines.length * lh;
+      // Respect textAlign
+      const align = el.textAlign || 'center';
+      const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle';
+      const tx = align === 'left' ? ex + 8 : align === 'right' ? ex + el.width - 8 : ex + el.width/2;
+      // Respect verticalAlign
+      let startY;
+      if (el.verticalAlign === 'top') startY = ey + fs + 4;
+      else if (el.verticalAlign === 'bottom') startY = ey + el.height - totalH + fs * 0.85;
+      else startY = ey + el.height/2 - totalH/2 + fs*0.85;
+      lines.forEach((line, i) => {
+        parts.push(`<text x="${tx}" y="${startY + i*lh}" text-anchor="${anchor}" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="${fs}" fill="#1a1a1a">${x(line)}</text>`);
+      });
+    }
+    parts.push(`</g>`);
+  });
+
+  parts.push('</svg>');
+  return parts.join('\n');
+}
+
+// ── Column Settings ──
+let currentColSettingsId = null;
+
+function openColumnSettings(colId) {
+  currentColSettingsId = colId;
+  const col = board.columns.find(c => c.id === colId);
+  if (!col) return;
+  document.getElementById("col-settings-name").textContent = col.name;
+  document.getElementById("col-webhook-url").value = col.webhook_url || "";
+  document.getElementById("col-webhook-headers").value =
+    col.webhook_headers ? JSON.stringify(col.webhook_headers, null, 2) : "";
+  document.getElementById("colSettingsModal").classList.add("open");
+}
+
+function closeColumnSettings() {
+  document.getElementById("colSettingsModal").classList.remove("open");
+  currentColSettingsId = null;
+}
+
+async function saveColumnSettings() {
+  if (!currentColSettingsId) return;
+  const url = document.getElementById("col-webhook-url").value.trim();
+  const headersRaw = document.getElementById("col-webhook-headers").value.trim();
+  let headers = null;
+  if (headersRaw) {
+    try { headers = JSON.parse(headersRaw); }
+    catch { showToast("Invalid JSON in headers"); return; }
+  }
+  const col = board.columns.find(c => c.id === currentColSettingsId);
+  const body = { webhook_url: url || null, webhook_headers: headers };
+  // Manage trigger: set to "webhook" when url added to a null-trigger col; clear when url removed
+  if (url && !col.trigger) body.trigger = "webhook";
+  else if (!url && col.trigger === "webhook") body.trigger = null;
+  try {
+    const updated = await api("PATCH", `/column/${currentColSettingsId}`, body);
+    const idx = board.columns.findIndex(c => c.id === currentColSettingsId);
+    if (idx !== -1) board.columns[idx] = { ...board.columns[idx], ...updated };
+    closeColumnSettings();
+    showToast("Column settings saved");
+    renderBoard();
+  } catch (e) {
+    showToast("Failed: " + e.message);
+  }
+}
+
+// ── Keyboard shortcuts ──
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    closeCreateModal();
+    closeDetailModal();
+    closeArchModal();
+    closeColumnSettings();
+    document.getElementById("activityPanel").classList.remove("open");
+  }
+  if (e.key === "n" && !e.metaKey && !e.ctrlKey && document.activeElement.tagName === "BODY") {
+    openCreateModal();
+  }
+  if (e.key === "a" && !e.metaKey && !e.ctrlKey && document.activeElement.tagName === "BODY") {
+    openArchModal();
+  }
+});
+
+init();
+</script>
+</body>
+</html>

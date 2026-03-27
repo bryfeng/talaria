@@ -1,0 +1,96 @@
+{
+  "_schema": "Talaria board config — columns only. Cards live in cards/*.md. Activity log lives in logs/talaria.log.",
+  "meta": {
+    "name": "Talaria",
+    "version": "1.0",
+    "created": "2026-03-21T00:00:00Z"
+  },
+  "columns": [
+    {
+      "id": "backlog",
+      "name": "Backlog",
+      "trigger": "notify",
+      "auto_transition": {
+        "to": "spec",
+        "when": "on_rule_pass",
+        "require": [
+          "label:auto-next"
+        ]
+      }
+    },
+    {
+      "id": "spec",
+      "name": "Spec",
+      "trigger": "agent_spawn",
+      "worker": "claude-code",
+      "context_files": [
+        "talaria.md",
+        "spec-guide.md"
+      ],
+      "auto_transition": {
+        "to": "groom",
+        "when": "on_agent_success"
+      }
+    },
+    {
+      "id": "groom",
+      "name": "Groom",
+      "trigger": "agent_spawn",
+      "worker": "claude-code",
+      "context_files": [
+        "talaria.md",
+        "groom-guide.md"
+      ],
+      "auto_transition": {
+        "to": "ready",
+        "when": "on_agent_success",
+        "require": [
+          "rule:groom_decomposition"
+        ],
+        "on_fail": "groom"
+      }
+    },
+    {
+      "id": "ready",
+      "name": "Ready",
+      "trigger": null,
+      "auto_transition": {
+        "to": "in_progress",
+        "when": "on_rule_pass",
+        "require": [
+          "label:auto-next"
+        ]
+      }
+    },
+    {
+      "id": "in_progress",
+      "name": "In Progress",
+      "trigger": "agent_spawn",
+      "worker": "claude-code",
+      "context_files": [
+        "talaria.md",
+        "coding-guide.md"
+      ],
+      "auto_transition": {
+        "to": "review",
+        "when": "on_agent_success"
+      }
+    },
+    {
+      "id": "review",
+      "name": "Review",
+      "trigger": null,
+      "auto_transition": {
+        "to": "done",
+        "when": "on_checks_pass",
+        "on_fail": "in_progress"
+      }
+    },
+    {
+      "id": "done",
+      "name": "Done",
+      "trigger": "notify",
+      "webhook_url": "https://example.com/hook"
+    }
+  ]
+}

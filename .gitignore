@@ -1,0 +1,26 @@
+# Environment
+.env
+*.log
+
+# Local state — these are generated at runtime
+agent_queue.json
+logs/
+talaria.json.bak
+kanban.json
+kanban.json.bak
+board.json
+
+# Card data — generated at runtime, stays local
+cards/
+
+# Git worktrees (created for in_progress cards: {card_id}-{slug}/)
+*-*/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# macOS
+.DS_Store

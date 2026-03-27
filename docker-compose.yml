@@ -1,0 +1,73 @@
+# =============================================================================
+# Talaria docker-compose — production stack
+#
+# Required env vars (set in .env or your shell before running):
+#   TELEGRAM_BOT_TOKEN   — Telegram bot token for the messaging UI
+#   GITHUB_TOKEN         — GitHub personal access token (repo scope)
+#   GITHUB_REPO          — Full repo slug, e.g. owner/name
+#   NGROK_AUTHTOKEN      — ngrok authtoken (from ngrok.com/dashboard)
+#
+# Optional env vars (with defaults shown):
+#   TALARIA_PORT         — board API port  (default: 8400)
+#   TALARIA_WORK_DIR     — repo working directory mounted inside container
+# =============================================================================
+
+services:
+  # -------------------------------------------------------------------------
+  # Talaria — AI-native kanban + agent pipeline runner
+  # -------------------------------------------------------------------------
+  talaria:
+    build: .
+    ports:
+      - "${TALARIA_PORT:-8400}:8400"
+    environment:
+      # Board API
+      - TALARIA_PORT=${TALARIA_PORT:-8400}
+      # Repo working directory — must match the host volume mount below
+      - TALARIA_WORK_DIR=/workspace
+      # Agent watcher
+      - MAX_CONCURRENT=2
+      - POLL_INTERVAL=15
+      # Required secrets
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_REPO=${GITHUB_REPO}
+      # ngrok (used by server.py for Telegram webhook)
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    volumes:
+      # Mount the host repo so agent workers can touch real files
+      - .:/workspace
+      # Persistent Talaria data (cards, board state)
+      - talaria-data:/root/.talaria
+    restart: unless-stopped
+    # Ensure Talaria is healthy before dependent services (e.g. ngrok) start
+    depends_on:
+      talaria:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8400/api/board"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # -------------------------------------------------------------------------
+  # ngrok — public tunnel so Telegram can reach the webhook endpoint
+  # -------------------------------------------------------------------------
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    ports:
+      # ngrok inspect UI
+      - "4040:4040"
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command: http talaria:8400
+    # Only start ngrok once Talaria is healthy
+    depends_on:
+      talaria:
+        condition: service_healthy
+
+volumes:
+  # Stores: ~/.talaria/boards/, ~/.talaria/agents/, ~/.talaria/workers/
+  talaria-data:

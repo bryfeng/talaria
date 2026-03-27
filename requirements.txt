@@ -1,0 +1,10 @@
+# Talaria dependencies are now managed in pyproject.toml
+# See pyproject.toml for the full dependency list:
+#   - flask>=3.0
+#   - pyyaml>=6.0
+#   - requests>=2.31
+#   - python-dotenv>=1.0
+#
+# Optional:
+#   pip install talaria[server]  # gunicorn>=21.0
+#   pip install talaria[dev]     # pytest>=8.0, ruff>=0.2
