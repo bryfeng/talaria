@@ -846,6 +846,30 @@ def _requirements_pass(card: dict, requirements: list[str]) -> bool:
                 if not _groom_decomposition_pass(card):
                     return False
                 continue
+            if rule_name == "agent_work_done":
+                notes = card.get("status_notes", []) or []
+                has_finish = False
+                for n in notes:
+                    text = n.get("text", "") if isinstance(n, dict) else str(n)
+                    norm = text.lower()
+                    if "[runner]" in norm and "finished" in norm:
+                        has_finish = True
+                        break
+                if not has_finish:
+                    return False
+                continue
+            if rule_name == "review_passed":
+                notes = card.get("status_notes", []) or []
+                has_pass = False
+                for n in notes:
+                    text = n.get("text", "") if isinstance(n, dict) else str(n)
+                    norm = text.lower()
+                    if "[review-gate]" in norm and ("pass" in norm or "passed" in norm):
+                        has_pass = True
+                        break
+                if not has_pass:
+                    return False
+                continue
             return False
 
         field = req.split(":", 1)[1].strip() if req.startswith("field:") else req

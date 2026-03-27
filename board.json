@@ -73,7 +73,11 @@
       ],
       "auto_transition": {
         "to": "review",
-        "when": "on_agent_success"
+        "when": "on_agent_success",
+        "require": [
+          "rule:agent_work_done"
+        ],
+        "on_fail": "in_progress"
       }
     },
     {
@@ -83,6 +87,9 @@
       "auto_transition": {
         "to": "done",
         "when": "on_checks_pass",
+        "require": [
+          "rule:review_passed"
+        ],
         "on_fail": "in_progress"
       }
     },

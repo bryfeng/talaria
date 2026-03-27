@@ -12,7 +12,7 @@ Tests the server.py Flask app endpoints:
   PATCH /api/column/<id>
 """
 
-
+import json
 
 
 # ── /api/board ────────────────────────────────────────────────────────────────
@@ -155,6 +155,53 @@ class TestUpdateCard:
         rv = app_client.patch("/api/card/nope", json={"column": "backlog"})
         assert rv.status_code == 404
 
+    def test_blocks_in_progress_to_review_without_runner_success(self, app_client, tmp_talaria_dir):
+        board_path = tmp_talaria_dir["board_file"]
+        board = json.loads(board_path.read_text())
+        for col in board["columns"]:
+            if col["id"] == "in_progress":
+                col["auto_transition"] = {
+                    "to": "review",
+                    "when": "on_agent_success",
+                    "require": ["rule:agent_work_done"],
+                }
+        board_path.write_text(json.dumps(board, indent=2))
+
+        create = app_client.post("/api/card", json={"title": "Guarded move"})
+        card_id = create.get_json()["id"]
+        app_client.patch(f"/api/card/{card_id}", json={"column": "in_progress"})
+
+        rv = app_client.patch(f"/api/card/{card_id}", json={"column": "review"})
+        assert rv.status_code == 409
+        data = rv.get_json()
+        assert data["from"] == "in_progress"
+        assert data["to"] == "review"
+        assert "agent_success" in data.get("missing_requirements", [])
+
+    def test_allows_in_progress_to_review_with_runner_success_note(self, app_client, tmp_talaria_dir):
+        board_path = tmp_talaria_dir["board_file"]
+        board = json.loads(board_path.read_text())
+        for col in board["columns"]:
+            if col["id"] == "in_progress":
+                col["auto_transition"] = {
+                    "to": "review",
+                    "when": "on_agent_success",
+                    "require": ["rule:agent_work_done"],
+                }
+        board_path.write_text(json.dumps(board, indent=2))
+
+        create = app_client.post("/api/card", json={"title": "Guarded move pass"})
+        card_id = create.get_json()["id"]
+        app_client.patch(f"/api/card/{card_id}", json={"column": "in_progress"})
+        app_client.post(
+            f"/api/card/{card_id}/note",
+            json={"author": "***", "text": "[runner] Worker codex finished for card."},
+        )
+
+        rv = app_client.patch(f"/api/card/{card_id}", json={"column": "review"})
+        assert rv.status_code == 200
+        assert rv.get_json()["column"] == "review"
+
 
 # ── /api/card/<id>/note (POST) ────────────────────────────────────────────────
 
@@ -258,6 +305,50 @@ class TestColumnTriggers:
     def test_moving_to_done_column_does_not_error(self, app_client):
         create = app_client.post("/api/card", json={"title": "Done trigger"})
         card_id = create.get_json()["id"]
+        rv = app_client.patch(f"/api/card/{card_id}", json={"column": "done"})
+        assert rv.status_code == 200
+        assert rv.get_json()["column"] == "done"
+
+    def test_blocks_review_to_done_without_review_pass_signal(self, app_client, tmp_talaria_dir):
+        board_path = tmp_talaria_dir["board_file"]
+        board = json.loads(board_path.read_text())
+        for col in board["columns"]:
+            if col["id"] == "review":
+                col["auto_transition"] = {
+                    "to": "done",
+                    "when": "on_checks_pass",
+                    "require": ["rule:review_passed"],
+                }
+        board_path.write_text(json.dumps(board, indent=2))
+
+        create = app_client.post("/api/card", json={"title": "Review guard"})
+        card_id = create.get_json()["id"]
+        app_client.patch(f"/api/card/{card_id}", json={"column": "review"})
+
+        rv = app_client.patch(f"/api/card/{card_id}", json={"column": "done"})
+        assert rv.status_code == 409
+        assert "checks_passed" in rv.get_json().get("missing_requirements", [])
+
+    def test_allows_review_to_done_with_review_pass_signal(self, app_client, tmp_talaria_dir):
+        board_path = tmp_talaria_dir["board_file"]
+        board = json.loads(board_path.read_text())
+        for col in board["columns"]:
+            if col["id"] == "review":
+                col["auto_transition"] = {
+                    "to": "done",
+                    "when": "on_checks_pass",
+                    "require": ["rule:review_passed"],
+                }
+        board_path.write_text(json.dumps(board, indent=2))
+
+        create = app_client.post("/api/card", json={"title": "Review guard pass"})
+        card_id = create.get_json()["id"]
+        app_client.patch(f"/api/card/{card_id}", json={"column": "review"})
+        app_client.post(
+            f"/api/card/{card_id}/note",
+            json={"author": "***", "text": "[review-gate] passed: tests command succeeded"},
+        )
+
         rv = app_client.patch(f"/api/card/{card_id}", json={"column": "done"})
         assert rv.status_code == 200
         assert rv.get_json()["column"] == "done"

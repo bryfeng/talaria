@@ -11,6 +11,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -38,6 +39,110 @@ from talaria.guardrails import enforce_runner_target_separation
 app = Flask(__name__, static_folder=str(BASE_DIR / "static"))
 app.config["JSON_SORT_KEYS"] = False
 logger = logging.getLogger(__name__)
+
+
+def _get_auto_transition(col_config: dict) -> Optional[dict]:
+    policy = col_config.get("auto_transition")
+    if isinstance(policy, dict) and policy.get("to"):
+        return {
+            "to": policy.get("to"),
+            "when": policy.get("when", "on_agent_success"),
+            "require": policy.get("require", []) or [],
+            "on_fail": policy.get("on_fail"),
+        }
+    return None
+
+
+def _has_runner_finish_note(card: dict) -> bool:
+    for note in card.get("status_notes", []) or []:
+        text = ""
+        if isinstance(note, dict):
+            text = str(note.get("text", ""))
+        elif isinstance(note, str):
+            text = note
+        norm = text.lower()
+        if "[runner]" in norm and "finished" in norm:
+            return True
+    return False
+
+
+def _has_review_pass_note(card: dict) -> bool:
+    for note in card.get("status_notes", []) or []:
+        text = ""
+        if isinstance(note, dict):
+            text = str(note.get("text", ""))
+        elif isinstance(note, str):
+            text = note
+        norm = text.lower()
+        if "[review-gate]" in norm and ("passed" in norm or "pass" in norm):
+            return True
+    return False
+
+
+def _transition_missing_requirements(card: dict, from_col: str, to_col: str, board: dict) -> list[str]:
+    """Return missing requirement keys for a guarded forward transition.
+
+    Guard only applies when transition matches source column's configured auto_transition target.
+    Backward/lateral/manual transitions outside configured forward edge are left permissive.
+    """
+    src = next((c for c in board.get("columns", []) if c.get("id") == from_col), None)
+    if not src:
+        return []
+
+    policy = _get_auto_transition(src)
+    if not policy or policy.get("to") != to_col:
+        return []
+
+    missing: list[str] = []
+    when = (policy.get("when") or "").strip()
+
+    # Built-in evidence checks for forward transitions.
+    if when == "on_agent_success" and not _has_runner_finish_note(card):
+        missing.append("agent_success")
+    if when == "on_checks_pass" and not _has_review_pass_note(card):
+        missing.append("checks_passed")
+
+    # Declarative requirements from board.json
+    labels = card.get("labels", []) or []
+    for req in policy.get("require", []) or []:
+        req = (req or "").strip()
+        if not req:
+            continue
+
+        if req.startswith("label:"):
+            want = req.split(":", 1)[1].strip()
+            if want not in labels:
+                missing.append(req)
+            continue
+
+        if req.startswith("field:"):
+            field = req.split(":", 1)[1].strip()
+            val = card.get(field)
+            if val is None or (isinstance(val, str) and not val.strip()) or (isinstance(val, (list, dict)) and not val):
+                missing.append(req)
+            continue
+
+        if req.startswith("rule:"):
+            rule_name = req.split(":", 1)[1].strip()
+            if rule_name == "agent_work_done" and not _has_runner_finish_note(card):
+                missing.append(req)
+            elif rule_name == "review_passed" and not _has_review_pass_note(card):
+                missing.append(req)
+            continue
+
+        # bare field name shorthand
+        val = card.get(req)
+        if val is None or (isinstance(val, str) and not val.strip()) or (isinstance(val, (list, dict)) and not val):
+            missing.append(req)
+
+    # de-dup while preserving order
+    seen = set()
+    deduped = []
+    for m in missing:
+        if m not in seen:
+            seen.add(m)
+            deduped.append(m)
+    return deduped
 
 
 # ── API ─────────────────────────────────────────────────────────────────────────
@@ -111,9 +216,19 @@ def update_card(card_id):
 
     moved_to = None
 
-    # Column change → trigger logic
+    # Column change → guarded transition + trigger logic
     if "column" in body and body["column"] != old_col:
         moved_to = body["column"]
+
+        missing = _transition_missing_requirements(card, old_col, moved_to, board)
+        if missing:
+            return jsonify({
+                "error": "Transition blocked by policy requirements",
+                "from": old_col,
+                "to": moved_to,
+                "missing_requirements": missing,
+            }), 409
+
         card["column"] = moved_to
         col = next((c for c in board["columns"] if c["id"] == moved_to), None)
         _log("moved", card, from_col=old_col, to_col=moved_to)
