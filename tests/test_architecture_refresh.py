@@ -3,6 +3,7 @@
 import os
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -86,6 +87,34 @@ def test_maybe_queue_architecture_refresh_skips_when_existing_open_card():
                 "title": "Architecture Diagram (auto-refresh)",
                 "column": "ready",
                 "labels": [agent_watcher.ARCH_REFRESH_LABEL],
+            }
+        ]
+    }
+    runner = PipelineRunner()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        now = time.time()
+        _touch(root / "docs/architecture.md", now - 200)
+        _touch(root / "docs/architecture.excalidraw.json", now - 200)
+        _touch(root / "src/talaria/server.py", now - 50)
+
+        with patch.object(agent_watcher, "TALARIA_WORK_DIR", str(root)), \
+             patch.object(agent_watcher, "api_create") as mock_create:
+            runner._maybe_queue_architecture_refresh(board)
+            mock_create.assert_not_called()
+
+
+def test_maybe_queue_architecture_refresh_skips_recent_done_same_reason():
+    board = {
+        "cards": [
+            {
+                "id": "d1",
+                "title": "Architecture Diagram (auto-refresh)",
+                "column": "done",
+                "labels": [agent_watcher.ARCH_REFRESH_LABEL],
+                "description": "Auto-detected reason: core_newer:src/talaria/server.py",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         ]
     }

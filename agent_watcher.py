@@ -51,6 +51,7 @@ AUTO_SUMMARY = os.getenv("AUTO_SUMMARY", "").lower() in ("1", "true", "yes")
 ARCH_REFRESH_ENABLED = os.getenv("ARCH_REFRESH_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
 ARCH_REFRESH_INTERVAL_SEC = int(os.getenv("ARCH_REFRESH_INTERVAL_SEC", "600"))
 ARCH_DOC_MAX_AGE_SEC = int(os.getenv("ARCH_DOC_MAX_AGE_SEC", str(14 * 24 * 3600)))
+ARCH_REFRESH_DONE_COOLDOWN_SEC = int(os.getenv("ARCH_REFRESH_DONE_COOLDOWN_SEC", "21600"))
 ARCH_REFRESH_TITLE = "Architecture Diagram (auto-refresh)"
 ARCH_REFRESH_LABEL = "system:auto-arch-refresh"
 ARCH_CORE_FILES = [
@@ -280,6 +281,47 @@ def _find_open_arch_refresh_card(cards: list[dict]) -> Optional[dict]:
         if ARCH_REFRESH_LABEL in labels:
             return card
         if card.get("title") == ARCH_REFRESH_TITLE:
+            return card
+    return None
+
+
+def _parse_iso_ts(value: Optional[str]) -> Optional[float]:
+    if not value:
+        return None
+    try:
+        norm = value.replace("Z", "+00:00")
+        return datetime.fromisoformat(norm).timestamp()
+    except Exception:
+        return None
+
+
+def _extract_arch_refresh_reason(card: dict) -> Optional[str]:
+    text = card.get("description") or ""
+    m = re.search(r"Auto-detected reason:\s*(.+)", text)
+    if not m:
+        return None
+    return (m.group(1) or "").strip() or None
+
+
+def _find_recent_done_arch_refresh_card(cards: list[dict], reason: str, now_ts: Optional[float] = None) -> Optional[dict]:
+    if ARCH_REFRESH_DONE_COOLDOWN_SEC <= 0:
+        return None
+
+    now_ts = now_ts or time.time()
+    for card in cards:
+        if card.get("column") != "done":
+            continue
+        labels = card.get("labels", []) or []
+        if ARCH_REFRESH_LABEL not in labels and card.get("title") != ARCH_REFRESH_TITLE:
+            continue
+        if _extract_arch_refresh_reason(card) != reason:
+            continue
+
+        ts = _parse_iso_ts(card.get("updated_at")) or _parse_iso_ts(card.get("created_at"))
+        if ts is None:
+            continue
+
+        if now_ts - ts <= ARCH_REFRESH_DONE_COOLDOWN_SEC:
             return card
     return None
 
@@ -1063,6 +1105,10 @@ class PipelineRunner:
         cards = board.get("cards", []) or []
         existing = _find_open_arch_refresh_card(cards)
         if existing:
+            return
+
+        recent_done = _find_recent_done_arch_refresh_card(cards, reason)
+        if recent_done:
             return
 
         created = api_create(_arch_refresh_card_payload(reason))
