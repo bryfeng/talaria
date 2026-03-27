@@ -7,7 +7,6 @@ Tests the server.py Flask app endpoints:
   GET  /api/card/<id>
   PATCH /api/card/<id>
   POST /api/card/<id>/note
-  POST /api/card/<id>/cost
   DELETE /api/card/<id>
   GET  /api/activity
   PATCH /api/column/<id>
@@ -181,42 +180,6 @@ class TestAddNote:
         )
         card = app_client.get(f"/api/card/{card_id}").get_json()
         assert any(n["text"] == "First!" for n in card.get("status_notes", []))
-
-
-# ── /api/card/<id>/cost (POST) ────────────────────────────────────────────────
-
-class TestAddCost:
-    def test_append_cost_log_entry(self, app_client):
-        create = app_client.post("/api/card", json={"title": "Cost card"})
-        card_id = create.get_json()["id"]
-        rv = app_client.post(
-            f"/api/card/{card_id}/cost",
-            json={
-                "agent": "hermes",
-                "tokens": 12345,
-                "cost_usd": 0.25,
-                "ts": "2026-03-24T00:00:00+00:00",
-            },
-        )
-        assert rv.status_code == 201
-        entry = rv.get_json()
-        assert entry["agent"] == "hermes"
-        assert entry["tokens"] == 12345
-        assert entry["cost_usd"] == 0.25
-
-    def test_cost_log_accumulates(self, app_client):
-        create = app_client.post("/api/card", json={"title": "Multi cost"})
-        card_id = create.get_json()["id"]
-        app_client.post(
-            f"/api/card/{card_id}/cost",
-            json={"agent": "hermes", "tokens": 100, "cost_usd": 0.01},
-        )
-        app_client.post(
-            f"/api/card/{card_id}/cost",
-            json={"agent": "claude-code", "tokens": 200, "cost_usd": 0.02},
-        )
-        card = app_client.get(f"/api/card/{card_id}").get_json()
-        assert len(card["cost_log"]) == 2
 
 
 # ── /api/card/<id> (DELETE) ───────────────────────────────────────────────────

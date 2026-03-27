@@ -104,6 +104,7 @@ def _card_from_md(text: str) -> dict:
         log_text = ""
 
     card = dict(fm)
+    card.pop("cost_log", None)
     card["description"] = description
 
     # Parse status_notes — prefer frontmatter (handles multiline correctly)
@@ -128,12 +129,6 @@ def _card_from_md(text: str) -> dict:
                 status_notes.append({"ts": ts, "author": author, "text": text})
         card["status_notes"] = status_notes
 
-    # Parse cost_log from frontmatter
-    if "cost_log" in fm:
-        card["cost_log"] = fm["cost_log"]
-    else:
-        card["cost_log"] = []
-
     return card
 
 
@@ -143,7 +138,7 @@ def _card_to_md(card: dict) -> str:
     fm_keys = [
         "id", "title", "column", "priority", "assignee", "labels",
         "created_at", "updated_at", "worktree_path", "branch_name",
-        "agent_session_id", "base_branch", "cost_log", "github_issue", "repo",
+        "agent_session_id", "base_branch", "github_issue", "repo",
         "tests", "due_date",
     ]
     fm = {}

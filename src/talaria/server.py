@@ -105,7 +105,7 @@ def update_card(card_id):
 
     # Apply updates
     for key in ("title", "description", "priority", "assignee", "labels", "agent_session_id",
-                "base_branch", "worktree_path", "branch_name", "cost_log", "repo", "tests"):
+                "base_branch", "worktree_path", "branch_name", "repo", "tests"):
         if key in body:
             card[key] = body[key]
 
@@ -161,24 +161,6 @@ def add_note(card_id):
     card["updated_at"] = datetime.now(timezone.utc).isoformat()
     _save_card(card)
     return jsonify(note), 201
-
-
-@app.route("/api/card/<card_id>/cost", methods=["POST"])
-def add_cost(card_id):
-    card = _load_card(card_id)
-    if not card:
-        return jsonify({"error": "Not found"}), 404
-    body = request.json
-    entry = {
-        "agent": body.get("agent", "unknown"),
-        "tokens": body.get("tokens", 0),
-        "cost_usd": body.get("cost_usd", 0.0),
-        "ts": body.get("ts", datetime.now(timezone.utc).isoformat()),
-    }
-    card.setdefault("cost_log", []).append(entry)
-    card["updated_at"] = datetime.now(timezone.utc).isoformat()
-    _save_card(card)
-    return jsonify(entry), 201
 
 
 @app.route("/api/agent_queue")
