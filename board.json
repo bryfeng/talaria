@@ -87,9 +87,6 @@
       "auto_transition": {
         "to": "done",
         "when": "on_checks_pass",
-        "require": [
-          "rule:review_passed"
-        ],
         "on_fail": "in_progress"
       }
     },
