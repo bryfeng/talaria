@@ -14,7 +14,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Branch-per-card**: `worktree_path` and `branch_name` tracked on every card
 - **CI gate in Review**: Per-card `tests.command` — auto-advances on pass, reverts to In Progress on fail
 - **Real-time polling**: Frontend refreshes every 10s; active agents show pulsing indicator
-- **Cost tracking**: Tokens + USD logged per agent run
 - **CLI**: `talaria create`, `talaria move`, `talaria list`, `talaria log`, `talaria context`, `talaria note`
 - **Context guides**: Agent-specific prompts for Spec/Groom/Coding/Review stages
 - **Markdown source of truth**: Cards are `cards/<id>.md` — git-tracked with full history

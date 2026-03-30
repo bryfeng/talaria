@@ -81,9 +81,6 @@ SINGLE_CARD = {
     "status_notes": [
         {"id": "n1", "text": "Working on it.", "author": "alice", "ts": "2026-03-24T00:00:00+00:00"}
     ],
-    "cost_log": [
-        {"agent": "hermes", "tokens": 500, "cost_usd": 0.01, "ts": "2026-03-24T00:00:00+00:00"}
-    ],
     "activity": [
         {"ts": "2026-03-24T00:00:00+00:00", "action": "created", "card_id": "aaaa1111", "card_title": "Alpha card"}
     ],

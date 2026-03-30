@@ -4,7 +4,7 @@ Talaria Pipeline Runner — Watches the board and dispatches workers at each pip
 Reads column config (worker, context_files) from board.json columns via the /api/board endpoint.
 Drafts context from TALARIA_HOME/agents/ files + card spec.
 Spawns the right worker (hermes / claude-code / codex).
-Tracks PIDs, logs cost, advances cards.
+Tracks PIDs and advances cards.
 
 Usage:
     python agent_watcher.py
@@ -219,25 +219,6 @@ def api_patch(card_id: str, data: dict) -> bool:
             return True
     except Exception as e:
         print(f"[runner] Failed to PATCH card {card_id}: {e}")
-        return False
-
-
-def api_cost(card_id: str, agent: str, tokens: int, cost_usd: float) -> bool:
-    try:
-        url = f"http://localhost:{TALARIA_PORT}/api/card/{card_id}/cost"
-        body = json.dumps({
-            "agent": agent,
-            "tokens": tokens,
-            "cost_usd": cost_usd,
-            "ts": datetime.now(timezone.utc).isoformat(),
-        }).encode()
-        req = urllib.request.Request(url, data=body,
-            headers={"Content-Type": "application/json"},
-            method="POST")
-        with urllib.request.urlopen(req, timeout=10):
-            return True
-    except Exception as e:
-        print(f"[runner] Failed to log cost for {card_id}: {e}")
         return False
 
 
@@ -946,9 +927,6 @@ def handle_worker_done(worker: Worker, success: bool = True):
     note = f"[runner] Worker {worker.worker_type} finished for card #{card_id}. "
     note += f"Elapsed: {elapsed:.0f}s."
     api_note(card_id, note, author="runner")
-
-    # Log cost entry (tokens/cost populated by agent itself if known; runner logs 0 as a timestamp marker)
-    api_cost(card_id, agent=worker.worker_type, tokens=0, cost_usd=0.0)
 
     policy = _get_auto_transition(worker.col_config or {})
     if not policy or policy.get("when") != "on_agent_success":

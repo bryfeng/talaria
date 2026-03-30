@@ -66,7 +66,6 @@ Core HTTP service. Serves the REST API and the static web UI from a single proce
 | `PATCH` | `/api/card/:id` | Update card (column, priority, labels, etc.) |
 | `DELETE` | `/api/card/:id` | Delete card |
 | `POST` | `/api/card/:id/note` | Add status note |
-| `POST` | `/api/card/:id/cost` | Log token cost entry |
 | `GET` | `/api/agent_queue` | View dispatch queue |
 | `GET` | `/api/agent_queue/peek` | Preview next queued card (non-destructive) |
 | `POST` | `/api/agent_queue/pop` | Remove first card from queue |
@@ -106,9 +105,8 @@ Long-running daemon. Polls the board and drives the autonomous pipeline.
    d. Update card agent_session_id = PID
 4. Poll each active worker (os.waitpid WNOHANG) until exit
 5. On worker exit → handle_worker_done():
-   a. Log cost entry (agent, tokens, cost_usd)
-   b. Add status note
-   c. PATCH /api/card/:id {"column": next_column}
+   a. Add status note
+   b. PATCH /api/card/:id {"column": next_column}
 6. Review column CI gate (triggered for every card in review):
    a. Read card.tests.command (per-card field, not column config)
    b. If no tests defined → auto-advance to done
@@ -164,7 +162,7 @@ talaria list | jq '.[] | select(.column == "review")'
 Single-page kanban. Polls `/api/board` for state.
 
 - Drag-and-drop cards between columns
-- Click card → modal with full description, notes, cost
+- Click card → modal with full description and notes
 - Keyboard shortcuts: `N` = new card, `Esc` = close modal
 - Activity log panel
 
@@ -235,8 +233,6 @@ repo: talaria
 tests:
   command: pytest
   pass_if: exit_0
-cost_log:
-  - { agent: claude-code, tokens: 45000, cost_usd: 0.67, ts: '2026-03-23T00:00:20Z' }
 status_notes:
   - { ts: '2026-03-23T00:01:44Z', author: runner, text: Worker finished. Elapsed: 84s. }
 ---
@@ -313,7 +309,6 @@ Worker runs (reads context file, executes task):
     └─ PATCH /api/card/:id      {"column": "review"}
 
 agent_watcher (worker exit detected):
-    ├─ POST /api/card/:id/cost  {tokens, cost_usd}
     ├─ Add "Worker finished" status note
     └─ Advance card to next column
 

@@ -76,9 +76,8 @@ def test_unknown_rule_fails_requirements():
 @patch("agent_watcher.api_get", return_value={"id": "abc123"})
 @patch("agent_watcher.api_patch", return_value=True)
 @patch("agent_watcher.notify")
-@patch("agent_watcher.api_cost")
 @patch("agent_watcher.api_note")
-def test_handle_worker_done_moves_using_policy(mock_note, mock_cost, mock_notify, mock_patch, mock_get):
+def test_handle_worker_done_moves_using_policy(mock_note, mock_notify, mock_patch, mock_get):
     worker = MagicMock()
     worker.card_id = "abc123"
     worker.worker_type = "claude-code"
@@ -98,9 +97,8 @@ def test_handle_worker_done_moves_using_policy(mock_note, mock_cost, mock_notify
 @patch("agent_watcher.api_get", return_value={"id": "abc124", "labels": []})
 @patch("agent_watcher.api_patch", return_value=True)
 @patch("agent_watcher.notify")
-@patch("agent_watcher.api_cost")
 @patch("agent_watcher.api_note")
-def test_handle_worker_done_on_fail_when_requirements_missing(mock_note, mock_cost, mock_notify, mock_patch, mock_get):
+def test_handle_worker_done_on_fail_when_requirements_missing(mock_note, mock_notify, mock_patch, mock_get):
     worker = MagicMock()
     worker.card_id = "abc124"
     worker.worker_type = "claude-code"

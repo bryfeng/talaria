@@ -90,16 +90,16 @@ class TestAgentWatcherHelpers:
             assert card is not None
             assert card["id"] == "card123"
 
-    def test_api_cost_posts_to_endpoint(self, tmp_talaria_dir):
-        from agent_watcher import api_cost
+    def test_api_note_posts_to_endpoint(self, tmp_talaria_dir):
+        from agent_watcher import api_note
 
         cm = MagicMock()
         cm.__enter__.return_value = MagicMock()
         cm.__exit__.return_value = False
 
         with patch("agent_watcher.urllib.request.urlopen", return_value=cm) as mock_urlopen:
-            ok = api_cost("card456", "hermes", 1000, 0.05)
+            ok = api_note("card456", "done", author="runner")
             assert ok is True
             req = mock_urlopen.call_args[0][0]
             assert "card456" in req.full_url
-            assert "cost" in req.full_url
+            assert req.full_url.endswith("/note")

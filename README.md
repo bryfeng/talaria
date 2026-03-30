@@ -163,7 +163,7 @@ Each card gets its own git worktree and branch. Workers operate in isolation. Wh
 Every card can define a `tests.command` field. When it enters Review, the CI gate runs in the card's worktree — pass and it auto-advances to Done, fail and it bounces back to In Progress.
 
 ### Real-time polling
-The frontend polls every 10 seconds. Active agents show a pulsing indicator. Cost tracking (tokens + USD) is logged per run and shown on the card.
+The frontend polls every 10 seconds. Active agents show a pulsing indicator.
 
 ### Telegram integration
 Bot commands for full board operation from Telegram. Move cards, check status, get notified when work is done.
