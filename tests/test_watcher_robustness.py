@@ -286,6 +286,55 @@ def test_failure_reason_in_note(mock_note, mock_patch, mock_notify, runner):
     assert reason in note_texts
 
 
+# ── Review gate no-tests behavior ─────────────────────────────────────────────
+
+@patch("agent_watcher.notify")
+@patch("agent_watcher.api_patch", return_value=True)
+@patch("agent_watcher.api_note")
+def test_review_gate_no_tests_records_pass_before_move(mock_note, mock_patch, mock_notify, runner):
+    card = {
+        "id": "card-review-01",
+        "column": "review",
+        "status_notes": [],
+        "tests": None,
+    }
+    col_config = {
+        "id": "review",
+        "auto_transition": {"to": "done", "when": "on_checks_pass", "on_fail": "in_progress"},
+    }
+
+    runner._run_review_gate(card, col_config)
+
+    notes = [c[0][1] for c in mock_note.call_args_list]
+    assert any("[review-gate] passed: no tests defined" in n for n in notes)
+    assert ("card-review-01", {"column": "done"}) in [(c[0][0], c[0][1]) for c in mock_patch.call_args_list]
+    mock_notify.assert_called_once()
+
+
+@patch("agent_watcher.notify")
+@patch("agent_watcher.api_patch", return_value=False)
+@patch("agent_watcher.api_note")
+def test_review_gate_no_tests_logs_blocked_when_move_rejected(mock_note, mock_patch, mock_notify, runner):
+    card = {
+        "id": "card-review-02",
+        "column": "review",
+        "status_notes": [],
+        "tests": None,
+    }
+    col_config = {
+        "id": "review",
+        "auto_transition": {"to": "done", "when": "on_checks_pass", "on_fail": "in_progress"},
+    }
+
+    runner._run_review_gate(card, col_config)
+
+    notes = [c[0][1] for c in mock_note.call_args_list]
+    assert any("[review-gate] passed: no tests defined" in n for n in notes)
+    assert any("move to done was blocked" in n for n in notes)
+    assert ("card-review-02", {"column": "done"}) in [(c[0][0], c[0][1]) for c in mock_patch.call_args_list]
+    mock_notify.assert_not_called()
+
+
 # ── Env-var configuration ─────────────────────────────────────────────────────
 
 def test_worker_timeout_sec_env_default():

@@ -862,6 +862,17 @@ def _groom_decomposition_pass(card: dict) -> bool:
     return child_count >= 2 and has_decomposed_marker
 
 
+def _has_review_pass_note(card: dict) -> bool:
+    """Return True when card has evidence of review gate pass."""
+    notes = card.get("status_notes", []) or []
+    for n in notes:
+        text = n.get("text", "") if isinstance(n, dict) else str(n)
+        norm = text.lower()
+        if "[review-gate]" in norm and ("pass" in norm or "passed" in norm):
+            return True
+    return False
+
+
 def _requirements_pass(card: dict, requirements: list[str]) -> bool:
     """Validate lightweight field/label/rule requirements.
 
@@ -901,15 +912,7 @@ def _requirements_pass(card: dict, requirements: list[str]) -> bool:
                     return False
                 continue
             if rule_name == "review_passed":
-                notes = card.get("status_notes", []) or []
-                has_pass = False
-                for n in notes:
-                    text = n.get("text", "") if isinstance(n, dict) else str(n)
-                    norm = text.lower()
-                    if "[review-gate]" in norm and ("pass" in norm or "passed" in norm):
-                        has_pass = True
-                        break
-                if not has_pass:
+                if not _has_review_pass_note(card):
                     return False
                 continue
             return False
@@ -1144,11 +1147,20 @@ class PipelineRunner:
         tests = card.get("tests")
 
         if not tests:
-            # No tests defined — auto-advance to policy target
+            # No tests defined — treat as review pass evidence first, then transition.
+            # This aligns with server-side on_checks_pass policy, which requires a
+            # [review-gate] pass note before review -> done is accepted.
             to_col = policy.get("to", "done")
-            api_patch(card_id, {"column": to_col})
-            api_note(card_id, f"[review-gate] No tests defined — auto-advancing to {to_col}.", author="runner")
-            notify(f"✅ Card #{card_id} passed review (no tests defined)")
+
+            if not _has_review_pass_note(card):
+                api_note(card_id, "[review-gate] passed: no tests defined", author="***")
+
+            moved = api_patch(card_id, {"column": to_col})
+            if moved:
+                api_note(card_id, f"[review-gate] No tests defined — moved to {to_col}.", author="***")
+                notify(f"✅ Card #{card_id} passed review (no tests defined)")
+            else:
+                api_note(card_id, f"[review-gate] No tests defined, but move to {to_col} was blocked.", author="***")
             return
 
         command = tests.get("command")
