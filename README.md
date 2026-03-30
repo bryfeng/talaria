@@ -143,14 +143,11 @@ Talaria enforces runner/target separation by default:
 If runner path equals target path, `talaria-server` and `agent_watcher.py` fail fast.
 Emergency-only bypass: `TALARIA_BYPASS_ALLOWED=true`.
 
-Optional local enforcement for contributors:
+Optional local repo hooks for contributors:
 
 ```bash
 bash scripts/install_hooks.sh
 ```
-
-This installs a `commit-msg` hook requiring commit messages to include card IDs like `[card:7ce240ee]`.
-Explicit bypass tokens: `[no-card]` or `[ops]`.
 
 ---
 

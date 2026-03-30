@@ -1,4 +1,3 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-python3 scripts/check_commit_message.py "$1"
+# Commit message policy removed. Keep hook as explicit no-op for existing clones.
+exit 0
