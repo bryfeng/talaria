@@ -254,6 +254,18 @@ def api_create(data: dict) -> Optional[dict]:
         return None
 
 
+def api_compact_queue() -> Optional[dict]:
+    """Request queue compaction so stale entries don't loop forever."""
+    try:
+        url = f"http://localhost:{TALARIA_PORT}/api/agent_queue/compact"
+        req = urllib.request.Request(url, data=b"{}", headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        print(f"[runner] Failed to compact agent queue: {e}")
+        return None
+
+
 def _find_open_arch_refresh_card(cards: list[dict]) -> Optional[dict]:
     for card in cards:
         if card.get("column") == "done":
@@ -1209,6 +1221,13 @@ class PipelineRunner:
         print(f"[runner] Worker timeout: {WORKER_TIMEOUT_SEC}s, no-output timeout: {WORKER_NO_OUTPUT_SEC}s, max retries: {WORKER_MAX_RETRIES}")
         print(f"[runner] Arch refresh: enabled={ARCH_REFRESH_ENABLED}, interval={ARCH_REFRESH_INTERVAL_SEC}s, max_age={ARCH_DOC_MAX_AGE_SEC}s")
         print(f"[runner] Workers: hermes ({HERMES_BINARY}), claude-code ({CLAUDE_CODE_BINARY}), codex ({CODEX_BINARY})")
+
+        compacted = api_compact_queue()
+        if compacted:
+            print(
+                "[runner] Queue compacted on startup: "
+                f"before={compacted.get('before')} after={compacted.get('after')} dropped={compacted.get('dropped')}"
+            )
 
         running = True
         def signal_handler(sig, frame):

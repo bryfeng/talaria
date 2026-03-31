@@ -54,6 +54,28 @@ class TestQueueAgent:
         queue = json.loads(tmp_talaria_dir["agent_queue"].read_text())
         assert [q["card"]["id"] for q in queue] == ["q1", "q2"]
 
+    def test_compact_queue_drops_missing_and_dedupes(self, tmp_talaria_dir):
+        # Create one live card file by moving a card through API helper path.
+        from talaria.board import _save_card
+
+        _save_card({"id": "live1", "title": "Live", "column": "backlog", "created_at": "2026-01-01T00:00:00+00:00"})
+        tmp_talaria_dir["agent_queue"].write_text(
+            json.dumps(
+                [
+                    {"card": {"id": "live1", "column": "backlog"}, "queued_at": "2026-01-01T00:00:00+00:00"},
+                    {"card": {"id": "live1", "column": "backlog"}, "queued_at": "2026-01-01T00:00:01+00:00"},
+                    {"card": {"id": "gone", "column": "backlog"}, "queued_at": "2026-01-01T00:00:02+00:00"},
+                ],
+                indent=2,
+            )
+        )
+
+        result = triggers._compact_agent_queue()
+        assert result["before"] == 3
+        assert result["after"] == 1
+        assert result["dropped"]["missing_card"] == 1
+        assert result["dropped"]["deduped"] == 1
+
 
 class TestNotifyTelegram:
     def test_noops_without_credentials(self, tmp_talaria_dir):
@@ -98,8 +120,24 @@ class TestAgentWatcherHelpers:
         cm.__exit__.return_value = False
 
         with patch("agent_watcher.urllib.request.urlopen", return_value=cm) as mock_urlopen:
-            ok = api_note("card456", "done", author="runner")
+            ok = api_note("card456", "done", author="***")
             assert ok is True
             req = mock_urlopen.call_args[0][0]
             assert "card456" in req.full_url
             assert req.full_url.endswith("/note")
+
+    def test_api_compact_queue_calls_compact_endpoint(self, tmp_talaria_dir):
+        from agent_watcher import api_compact_queue
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({"before": 3, "after": 1}).encode()
+        cm = MagicMock()
+        cm.__enter__.return_value = mock_response
+        cm.__exit__.return_value = False
+
+        with patch("agent_watcher.urllib.request.urlopen", return_value=cm) as mock_urlopen:
+            result = api_compact_queue()
+            assert result == {"before": 3, "after": 1}
+            req = mock_urlopen.call_args[0][0]
+            assert req.full_url.endswith("/api/agent_queue/compact")
+            assert req.get_method() == "POST"

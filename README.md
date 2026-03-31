@@ -127,7 +127,7 @@ server.py (Flask :8400) ──reads/writes──▶ cards/*.md   ← one file pe
 | Ready | `auto_transition(on_rule_pass)` | Auto-moves to In Progress when card has label `auto-next` |
 | In Progress | `agent_spawn` + `auto_transition(on_agent_success)` | Dispatches implementation agent then advances to Review |
 | Review | `auto_transition(on_checks_pass)` | Runs review checks/tests and advances/falls back by policy |
-| Done | `notify` | Telegram notification + rolling cap of 20 (oldest auto-archived) |
+| Done | `notify` | Telegram notification + rolling cap of 20 (oldest auto-archived). You can also cut explicit release boundaries. |
 
 Add or rename columns in `board.json`. Use per-column `auto_transition` (`to`, `when`, `require`, `on_fail`) for automated funnel flow.
 
@@ -148,6 +148,19 @@ Optional local repo hooks for contributors:
 ```bash
 bash scripts/install_hooks.sh
 ```
+
+Promotion health gate (recommended before syncing stable from dev/main):
+
+```bash
+# from repo root
+bash scripts/promotion-health-gate.sh
+```
+
+Gate checks:
+- API responds at `/api/board`
+- agent queue is below threshold (`TALARIA_MAX_QUEUE_THRESHOLD`, default 25)
+- watcher process count is sane (`TALARIA_WATCHER_MIN..TALARIA_WATCHER_MAX`, default 1..2)
+- fast regression tests pass (`tests/test_api.py`, `tests/test_watcher_api_contract.py`)
 
 ---
 
@@ -228,6 +241,7 @@ talaria move <id> in_progress     # Triggers agent_spawn
 talaria log <id>                  # Activity log + status notes
 talaria context <id>              # Full card data (for agent prompts)
 talaria note <id> "fixed the bug" # Add status note
+talaria release-cut v0.2.0      # Archive current Done cards and stamp release
 ```
 
 All output is JSON — pipe to `jq` for scripting.
@@ -245,8 +259,10 @@ DELETE /api/card/:id        — Delete card
 POST   /api/card/:id/note   — Add status note
 GET    /api/activity        — Recent activity log
 GET    /api/history         — Query done + archive graph (q/domain/component/type/release)
-GET    /api/agent_queue     — View agent dispatch queue
-POST   /api/agent_queue/pop — Pop next card from queue
+GET    /api/agent_queue         — View agent dispatch queue
+POST   /api/agent_queue/pop     — Pop next card from queue
+POST   /api/agent_queue/compact — Drop stale queue rows + dedupe by card id
+POST   /api/release/cut         — Archive current Done cards for a release boundary
 ```
 
 Example:

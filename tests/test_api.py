@@ -290,6 +290,58 @@ class TestHistory:
         assert all("telegram" in r.get("domains", []) for r in rows)
 
 
+class TestQueueAndReleaseCut:
+    def test_compact_agent_queue_drops_stale_and_dedupes(self, app_client, tmp_talaria_dir):
+        create = app_client.post("/api/card", json={"title": "Queue target"})
+        card_id = create.get_json()["id"]
+
+        tmp_talaria_dir["agent_queue"].write_text(
+            json.dumps(
+                [
+                    {"card": {"id": card_id, "column": "backlog"}, "queued_at": "2026-01-01T00:00:00+00:00"},
+                    {"card": {"id": card_id, "column": "backlog"}, "queued_at": "2026-01-01T00:00:01+00:00"},
+                    {"card": {"id": "missing", "column": "backlog"}, "queued_at": "2026-01-01T00:00:02+00:00"},
+                ],
+                indent=2,
+            )
+        )
+
+        rv = app_client.post("/api/agent_queue/compact", json={})
+        assert rv.status_code == 200
+        data = rv.get_json()
+        assert data["before"] == 3
+        assert data["after"] == 1
+        assert data["dropped"]["missing_card"] == 1
+        assert data["dropped"]["deduped"] == 1
+
+    def test_release_cut_archives_done_and_stamps_release(self, app_client, tmp_talaria_dir):
+        c1 = app_client.post("/api/card", json={"title": "Ship one"}).get_json()["id"]
+        c2 = app_client.post("/api/card", json={"title": "Ship two"}).get_json()["id"]
+        app_client.patch(f"/api/card/{c1}", json={"column": "done"})
+        app_client.patch(f"/api/card/{c2}", json={"column": "done"})
+
+        rv = app_client.post("/api/release/cut", json={"release": "v0.2.0"})
+        assert rv.status_code == 200
+        body = rv.get_json()
+        assert body["release"] == "v0.2.0"
+        assert body["archived_count"] == 2
+        assert set(body["archived_ids"]) == {c1, c2}
+
+        board = app_client.get("/api/board").get_json()
+        done_cards = [c for c in board.get("cards", []) if c.get("column") == "done"]
+        assert done_cards == []
+
+        graph_file = tmp_talaria_dir["archive_dir"] / "graph.jsonl"
+        rows = [json.loads(line) for line in graph_file.read_text().splitlines() if line.strip()]
+        assert rows
+        assert all(row.get("release") == "v0.2.0" for row in rows)
+
+    def test_release_cut_requires_release_tag(self, app_client):
+        rv = app_client.post("/api/release/cut", json={})
+        assert rv.status_code == 400
+        assert "release" in rv.get_json().get("error", "")
+
+
 # ── Column trigger integration ─────────────────────────────────────────────────
 
 class TestColumnTriggers:

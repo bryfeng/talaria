@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple
 
 from talaria.board import (
+    _all_cards,
     _repo_dir,
     _log,
     _slugify,
@@ -364,6 +365,86 @@ def _queue_agent(card: dict) -> None:
         })
         with open(AGENT_QUEUE, "w") as f:
             json.dump(queue, f, indent=2)
+
+
+def _compact_agent_queue() -> dict:
+    """Drop stale/invalid queued items and dedupe by card id (keep newest).
+
+    Rules:
+      - missing card id => drop
+      - card no longer exists on board => drop
+      - card moved columns since enqueue snapshot => drop
+      - duplicates for same card id => keep newest queued_at
+    """
+    with AGENT_QUEUE_LOCK:
+        queue = []
+        if AGENT_QUEUE.exists():
+            with open(AGENT_QUEUE) as f:
+                queue = json.load(f)
+
+        if not isinstance(queue, list):
+            queue = []
+
+        live_cards = {str(c.get("id")): c for c in _all_cards() if c.get("id")}
+        dropped = {
+            "invalid_item": 0,
+            "missing_card_id": 0,
+            "missing_card": 0,
+            "column_changed": 0,
+            "deduped": 0,
+        }
+
+        valid_items = []
+        for item in queue:
+            if not isinstance(item, dict):
+                dropped["invalid_item"] += 1
+                continue
+
+            snapshot = item.get("card")
+            if not isinstance(snapshot, dict):
+                dropped["invalid_item"] += 1
+                continue
+
+            card_id = str(snapshot.get("id") or "").strip()
+            if not card_id:
+                dropped["missing_card_id"] += 1
+                continue
+
+            live = live_cards.get(card_id)
+            if not live:
+                dropped["missing_card"] += 1
+                continue
+
+            snapshot_col = snapshot.get("column")
+            live_col = live.get("column")
+            if snapshot_col and live_col and snapshot_col != live_col:
+                dropped["column_changed"] += 1
+                continue
+
+            valid_items.append(item)
+
+        by_card: dict[str, dict] = {}
+        for item in valid_items:
+            snapshot = item.get("card") or {}
+            card_id = str(snapshot.get("id"))
+            queued_at = str(item.get("queued_at") or "")
+            prev = by_card.get(card_id)
+            if not prev or queued_at >= str(prev.get("queued_at") or ""):
+                by_card[card_id] = item
+
+        deduped_count = max(0, len(valid_items) - len(by_card))
+        dropped["deduped"] = deduped_count
+
+        compacted = sorted(by_card.values(), key=lambda it: str(it.get("queued_at") or ""))
+
+        with open(AGENT_QUEUE, "w") as f:
+            json.dump(compacted, f, indent=2)
+
+        return {
+            "before": len(queue),
+            "after": len(compacted),
+            "dropped": dropped,
+        }
 
 
 # ── Trigger dispatcher ─────────────────────────────────────────────────────────

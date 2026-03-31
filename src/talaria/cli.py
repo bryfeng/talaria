@@ -12,6 +12,7 @@ Commands:
   talaria context <card-id>       Show full card context (for agents)
   talaria note <card-id> <text>   Add a status note to a card
   talaria history [opts]          Query done/archive history graph
+  talaria release-cut <release>   Archive current Done cards under a release tag
 
 create options:
   -p, --priority P0|P1|P2|P3      Priority level (default: medium)
@@ -217,6 +218,18 @@ def cmd_history(args):
     print(json.dumps(rows, indent=2))
 
 
+def cmd_release_cut(args):
+    if not args:
+        print(json.dumps({"error": "Usage: talaria release-cut <release-tag>"}), file=sys.stderr)
+        sys.exit(1)
+    release = args[0].strip()
+    if not release:
+        print(json.dumps({"error": "release-tag cannot be empty"}), file=sys.stderr)
+        sys.exit(1)
+    result = _request("POST", "/api/release/cut", {"release": release})
+    print(json.dumps(result, indent=2))
+
+
 COMMANDS = {
     "list": cmd_list,
     "status": cmd_status,
@@ -226,6 +239,7 @@ COMMANDS = {
     "context": cmd_context,
     "note": cmd_note,
     "history": cmd_history,
+    "release-cut": cmd_release_cut,
 }
 
 

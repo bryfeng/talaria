@@ -12,6 +12,7 @@ import shutil
 import yaml
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 # ── Paths ───────────────────────────────────────────────────────────────────────
 
@@ -139,7 +140,7 @@ def _card_to_md(card: dict) -> str:
         "id", "title", "column", "priority", "assignee", "labels",
         "created_at", "updated_at", "worktree_path", "branch_name",
         "agent_session_id", "base_branch", "github_issue", "repo",
-        "tests", "due_date",
+        "tests", "due_date", "release",
     ]
     fm = {}
     for k in fm_keys:
@@ -243,10 +244,11 @@ def _primary_type(labels: list[str]) -> str:
     return "chore"
 
 
-def _build_archive_graph_entry(card: dict, archived_path: Path) -> dict:
+def _build_archive_graph_entry(card: dict, archived_path: Path, release_override: Optional[str] = None) -> dict:
     labels = card.get("labels", [])
     domains = _extract_label_values(labels, "domain:") or [DEFAULT_DOMAIN]
     components = _extract_label_values(labels, "component:") or [DEFAULT_COMPONENT]
+    release = (release_override or card.get("release") or "").strip() or None
 
     entry = {
         "schema": f"talaria.archive-graph.v{GRAPH_SCHEMA_VERSION}",
@@ -254,7 +256,7 @@ def _build_archive_graph_entry(card: dict, archived_path: Path) -> dict:
         "title": card.get("title", ""),
         "type": _primary_type(labels),
         "completed_at": card.get("updated_at") or datetime.now(timezone.utc).isoformat(),
-        "release": card.get("release") or None,
+        "release": release,
         "domains": domains,
         "components": components,
         "depends_on": _extract_label_values(labels, "depends:") + _extract_label_values(labels, "depends_on:"),
@@ -357,24 +359,16 @@ def _history_query(
     return rows[: max(1, limit)]
 
 
-def _archive_excess_done_cards(done_cap: int = DONE_CAP) -> list[str]:
-    """Archive oldest Done cards to keep Done as a rolling operational window.
+def _archive_cards(cards: list[dict], release_override: Optional[str] = None) -> list[str]:
+    """Archive provided card objects and append graph rows.
 
-    Archive is file-based (cards/archive/*.md) with graph index updates.
-    Returns a list of archived card IDs.
+    If release_override is provided, each archive graph row is stamped with that
+    release tag regardless of per-card metadata.
     """
-    done_cards = [c for c in _all_cards() if c.get("column") == "done"]
-    overflow = len(done_cards) - done_cap
-    if overflow <= 0:
-        return []
-
-    done_cards.sort(key=lambda c: (c.get("updated_at") or c.get("created_at") or ""))
-    to_archive = done_cards[:overflow]
-
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     archived_ids: list[str] = []
 
-    for card in to_archive:
+    for card in cards:
         card_id = card.get("id")
         if not card_id:
             continue
@@ -388,11 +382,41 @@ def _archive_excess_done_cards(done_cap: int = DONE_CAP) -> list[str]:
             dst = ARCHIVE_DIR / f"{card_id}-{stamp}.md"
 
         shutil.move(str(src), str(dst))
-        _append_archive_graph_entry(_build_archive_graph_entry(card, dst))
+        _append_archive_graph_entry(_build_archive_graph_entry(card, dst, release_override=release_override))
         _log("archived", card, from_col="done", to_col="archive")
         archived_ids.append(card_id)
 
     return archived_ids
+
+
+def _archive_done_cards_for_release(release: str) -> list[str]:
+    """Archive all Done cards and stamp archive rows with the provided release."""
+    release_tag = (release or "").strip()
+    if not release_tag:
+        return []
+
+    done_cards = [c for c in _all_cards() if c.get("column") == "done"]
+    if not done_cards:
+        return []
+
+    done_cards.sort(key=lambda c: (c.get("updated_at") or c.get("created_at") or ""))
+    return _archive_cards(done_cards, release_override=release_tag)
+
+
+def _archive_excess_done_cards(done_cap: int = DONE_CAP) -> list[str]:
+    """Archive oldest Done cards to keep Done as a rolling operational window.
+
+    Archive is file-based (cards/archive/*.md) with graph index updates.
+    Returns a list of archived card IDs.
+    """
+    done_cards = [c for c in _all_cards() if c.get("column") == "done"]
+    overflow = len(done_cards) - done_cap
+    if overflow <= 0:
+        return []
+
+    done_cards.sort(key=lambda c: (c.get("updated_at") or c.get("created_at") or ""))
+    to_archive = done_cards[:overflow]
+    return _archive_cards(to_archive)
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

@@ -26,10 +26,12 @@ from talaria.board import (
     _full_board,
     _get_repos,
     _log,
+    _archive_done_cards_for_release,
     _archive_excess_done_cards,
     _history_query,
 )
 from talaria.triggers import (
+    _compact_agent_queue,
     _trigger_action,
     AGENT_QUEUE,
     AGENT_QUEUE_LOCK,
@@ -312,6 +314,25 @@ def pop_agent_queue():
         with open(AGENT_QUEUE, "w") as f:
             json.dump(queue, f, indent=2)
         return jsonify({"ok": True})
+
+
+@app.route("/api/agent_queue/compact", methods=["POST"])
+def compact_agent_queue():
+    """Drop stale queue items and dedupe by card id (keeps newest queued item)."""
+    result = _compact_agent_queue()
+    return jsonify(result)
+
+
+@app.route("/api/release/cut", methods=["POST"])
+def release_cut():
+    """Archive current Done cards into a named release boundary."""
+    body = request.json or {}
+    release = (body.get("release") or "").strip()
+    if not release:
+        return jsonify({"error": "release is required"}), 400
+
+    archived_ids = _archive_done_cards_for_release(release)
+    return jsonify({"release": release, "archived_count": len(archived_ids), "archived_ids": archived_ids})
 
 
 @app.route("/api/column/<col_id>", methods=["PATCH"])

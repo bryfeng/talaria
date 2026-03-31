@@ -24,6 +24,7 @@ from talaria.cli import (
     cmd_context,
     cmd_note,
     cmd_history,
+    cmd_release_cut,
     _request,
     COMMANDS,
 )
@@ -325,6 +326,21 @@ class TestCmdHistory:
         assert "a1" in out
 
 
+class TestCmdReleaseCut:
+    def test_release_cut_calls_api(self, capsys):
+        with patch("talaria.cli._request") as mock_req:
+            mock_req.return_value = {"release": "v0.2.0", "archived_count": 2, "archived_ids": ["a", "b"]}
+            cmd_release_cut(["v0.2.0"])
+
+        mock_req.assert_called_once_with("POST", "/api/release/cut", {"release": "v0.2.0"})
+        out = capsys.readouterr().out
+        assert "archived_count" in out
+
+    def test_release_cut_requires_arg(self, capsys):
+        with pytest.raises(SystemExit):
+            cmd_release_cut([])
+
+
 class TestRequestErrors:
     def test_http_error_prints_json_and_exits(self, capsys):
         import urllib.error
@@ -377,6 +393,7 @@ class TestCommandsMap:
         assert "context" in COMMANDS
         assert "note" in COMMANDS
         assert "history" in COMMANDS
+        assert "release-cut" in COMMANDS
 
     def test_unknown_command_exits(self, capsys):
         with patch.object(sys, "argv", ["talaria", "bad-cmd"]):
