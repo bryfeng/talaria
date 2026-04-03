@@ -597,7 +597,12 @@ class Worker:
         return os.environ.copy()
 
     def _spawn_claude_code(self, ctx_path: Path, goal: str) -> subprocess.Popen:
-        cmd = [CLAUDE_CODE_BINARY, "--dangerously-skip-permissions", "--print", goal]
+        col_id = self.col_config.get("id", "")
+        # --print for read-only stages (spec, groom); full execution for implementation
+        if col_id in ("spec", "groom"):
+            cmd = [CLAUDE_CODE_BINARY, "--dangerously-skip-permissions", "--print", goal]
+        else:
+            cmd = [CLAUDE_CODE_BINARY, "--dangerously-skip-permissions", goal]
         return subprocess.Popen(cmd, cwd=self.work_dir, env=self._env(),
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
