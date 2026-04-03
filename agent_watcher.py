@@ -941,9 +941,13 @@ def handle_worker_done(worker: Worker, success: bool = True):
         except Exception:
             pass
 
-    note = f"[runner] Worker {worker.worker_type} finished for card #{card_id}. "
+    note = f"[runner] Worker {worker.worker_type} {'finished' if success else 'FAILED'} for card #{card_id}. "
     note += f"Elapsed: {elapsed:.0f}s."
     api_note(card_id, note, author="runner")
+
+    if not success:
+        api_note(card_id, "[runner] Worker exited with non-zero code. Card will NOT advance.", author="runner")
+        return
 
     policy = _get_auto_transition(worker.col_config or {})
     if not policy or policy.get("when") != "on_agent_success":
@@ -1070,7 +1074,9 @@ class PipelineRunner:
                 self._handle_timeout(worker, reason)
                 done.append(card_id)
             elif worker.is_done():
-                handle_worker_done(worker)
+                # Check exit code — non-zero means failure
+                rc = worker._popen.returncode if worker._popen else None
+                handle_worker_done(worker, success=(rc == 0))
                 done.append(card_id)
 
         for card_id in done:
