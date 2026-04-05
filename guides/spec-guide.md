@@ -72,6 +72,31 @@ curl -X PATCH http://localhost:8400/api/card/<card-id> \
 
 Or use the CLI: `talaria context <card-id>` to read, then `talaria note <card-id> "Spec written."`
 
+## Scope Assessment
+
+After writing the spec, assess the implementation scope and add labels via the API:
+
+**Criteria for `scope:large`** (add label if ANY are true):
+- Touches more than 3 files
+- Requires creating more than 2 new files
+- Involves refactoring a file over 500 lines
+- Has more than 5 acceptance criteria
+- Estimated implementation time > 30 minutes
+
+**Criteria for `scope:small`** (add label if ALL are true):
+- Touches 1-3 files
+- Clear, mechanical changes
+- Estimated implementation time < 15 minutes
+
+```bash
+# Add scope label
+curl -X PATCH http://localhost:8400/api/card/<card-id> \
+  -H "Content-Type: application/json" \
+  -d '{"labels": ["<existing-labels>", "scope:large"]}'
+```
+
+Also add `subsystems:N` and `component:*` labels to indicate how many modules are affected. These help Groom decide whether to decompose.
+
 ## When You're Done
 
 Add a status note to the card:

@@ -58,12 +58,41 @@ Go through each section of the spec and check:
 | Implementation details in criteria | Remove "how"; keep only "what" |
 | Untestable criteria ("intuitive UX") | Rewrite as measurable behavior |
 
+## Decomposition (scope:large cards)
+
+If the card has `scope:large` label, or you determine it's too big for a single implementation session, **decompose it into child cards**:
+
+1. Break the work into 2-5 independent sub-tasks, each completable in under 30 minutes
+2. Each child card should be a clear, standalone deliverable with its own acceptance criteria
+3. Create child cards via the API:
+
+```bash
+curl -X POST http://localhost:8400/api/card \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "<specific subtask>",
+    "column": "ready",
+    "repo": "<same repo as parent>",
+    "labels": ["child:<parent-card-id>", "auto-next"],
+    "description": "<focused description with verification steps>"
+  }'
+```
+
+4. Add `child:<child-id>` labels to the parent card for each child created
+5. Add `decomposed` label to the parent card
+6. Add a note listing all child cards created
+
+**Good decomposition**: each child modifies a distinct set of files, can be tested independently, and doesn't block other children.
+
+**Bad decomposition**: children that depend on each other in sequence, children that are just "part 1" and "part 2" of the same change.
+
 ## What to Do
 
 1. Read the card's full content (description + existing spec section)
 2. Walk through the checklist above
-3. If spec is complete: add your checklist results as a note, move to `ready`
-4. If spec needs changes: add specific, actionable notes describing what to add/fix
+3. **If scope:large**: decompose into child cards, add `decomposed` + `child:*` labels, move parent to `ready`
+4. If spec is complete and scope is manageable: add your checklist results as a note, move to `ready`
+5. If spec needs changes: add specific, actionable notes describing what to add/fix
 
 ## When You're Done
 
