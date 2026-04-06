@@ -5,6 +5,11 @@
       "name": "talaria",
       "path": ".",
       "talaria_instance_path": "~/.talaria/talaria"
+    },
+    {
+      "name": "sherpa-backend",
+      "path": "~/cline/sherpa/backend",
+      "talaria_instance_path": "~/.talaria/sherpa-backend"
     }
   ]
 }

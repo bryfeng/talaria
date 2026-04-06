@@ -607,7 +607,12 @@ class Worker:
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
     def _spawn_codex(self, ctx_path: Path, goal: str) -> subprocess.Popen:
-        cmd = [CODEX_BINARY, goal]
+        col_id = self.col_config.get("id", "")
+        # For spec/groom: use read-only model + review flag
+        if col_id in ("spec", "groom"):
+            cmd = [CODEX_BINARY, "exec", "-c", "approval_mode=false", "--model", "o4-mini", goal]
+        else:
+            cmd = [CODEX_BINARY, "exec", "-c", "approval_mode=false", goal]
         return subprocess.Popen(cmd, cwd=self.work_dir, env=self._env(),
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
