@@ -405,6 +405,48 @@ def arch_meta():
     return jsonify(result)
 
 
+# ── status ──────────────────────────────────────────────────────────────────────
+
+@app.route("/api/status")
+def get_status():
+    """Return board summary and active agent status."""
+    import os
+    board = _full_board()
+    columns = {c["id"]: c["name"] for c in board["columns"]}
+
+    # Count cards per column
+    card_counts = {}
+    active_agents = []
+    for card in board.get("cards", []):
+        col = card.get("column", "unknown")
+        card_counts[col] = card_counts.get(col, 0) + 1
+
+        # Check if this card has a running agent
+        pid_str = card.get("agent_session_id")
+        if pid_str and col not in ("done",):
+            try:
+                pid = int(pid_str)
+                alive = True
+                try:
+                    os.kill(pid, 0)
+                except (ProcessLookupError, PermissionError):
+                    alive = False
+                active_agents.append({
+                    "card_id": card["id"],
+                    "card_title": card["title"],
+                    "pid": pid,
+                    "alive": alive,
+                    "worker": card.get("agent_worker", "unknown"),
+                })
+            except (ValueError, TypeError):
+                pass
+
+    return jsonify({
+        "board": card_counts,
+        "active_agents": active_agents,
+    })
+
+
 # ── static files ───────────────────────────────────────────────────────────────
 
 @app.route("/docs/<path:filename>")
